@@ -1,12 +1,12 @@
 import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
-// Remplace par le chemin vers ton fichier vidéo dans src/assets
-import promoVideo from '../assets/video.MP4'; 
-
 export default function AboutVideoSection() {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(true);
+
+  // Chemin direct vers la vidéo dans le dossier public
+  const promoVideo = '/videos/promo.MP4';
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -63,7 +63,8 @@ export default function AboutVideoSection() {
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true, margin: '-50px' }}
           transition={{ duration: 0.7, ease: 'easeOut' }}
-          className="relative w-full max-w-3xl h-[480px] sm:h-[550px] rounded-3xl overflow-hidden shadow-xl border border-white/60 bg-neutral-900 group"
+          className="relative w-full max-w-3xl h-[480px] sm:h-[550px] rounded-3xl overflow-hidden shadow-xl border border-white/60 bg-neutral-900 group cursor-pointer"
+          onClick={togglePlay}
         >
           {/* Élément Vidéo */}
           <video
@@ -79,26 +80,17 @@ export default function AboutVideoSection() {
           {/* Calque Sombre de Dégradé */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
 
-          {/* Bouton Play/Pause Central */}
-          <button
-            onClick={togglePlay}
-            aria-label={isPlaying ? "Mettre en pause la vidéo" : "Lancer la vidéo"}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-white/20 backdrop-blur-md border border-white/40 text-white flex items-center justify-center transition-all duration-300 hover:scale-110 hover:bg-white/40 shadow-lg z-20"
-          >
-            {isPlaying ? (
-              <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                <rect x="6" y="4" width="4" height="16" rx="1" />
-                <rect x="14" y="4" width="4" height="16" rx="1" />
-              </svg>
-            ) : (
+          {/* Bouton Play/Pause : affiché UNIQUEMENT si la vidéo est en pause, ou au survol */}
+          {!isPlaying && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-white/20 backdrop-blur-md border border-white/40 text-white flex items-center justify-center transition-all duration-300 hover:scale-110 hover:bg-white/40 shadow-lg z-20">
               <svg className="w-6 h-6 fill-current translate-x-0.5" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-            )}
-          </button>
+            </div>
+          )}
 
           {/* Grille de Statistiques Posée en Bas */}
-          <div className="absolute bottom-0 inset-x-0 p-6 sm:p-10 z-10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-white text-center sm:text-left backdrop-blur-xs bg-black/10">
+          <div className="absolute bottom-0 inset-x-0 p-6 sm:p-10 z-10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-white text-center sm:text-left backdrop-blur-xs bg-black/10 pointer-events-none">
             {stats.map((stat, index) => (
               <div key={index} className="flex flex-col">
                 <span className="text-3xl sm:text-4xl font-serif font-semibold tracking-tight text-white mb-1">

@@ -8,7 +8,6 @@ export function CartProvider({ children }) {
     try {
       const saved = localStorage.getItem('cart');
       const parsed = saved ? JSON.parse(saved) : [];
-      // Vérification stricte : s'assurer que parsed est bien un Array
       return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
       console.error("Erreur de lecture du panier dans localStorage", e);
@@ -34,15 +33,19 @@ export function CartProvider({ children }) {
   const removeFromCart = (id) => setCart(prev => (Array.isArray(prev) ? prev.filter(i => i.id !== id) : []));
   const clearCart = () => setCart([]);
 
-  // Calcul du montant total sécurisé
   const safeCart = Array.isArray(cart) ? cart : [];
+  
+  // Calcul du montant total sécurisé
   const totalAmount = safeCart.reduce((acc, item) => {
     const price = item.promo_price ?? item.original_price;
     return acc + price * item.qty;
   }, 0);
 
+  // Nombre total d'articles dans le panier
+  const totalItems = safeCart.reduce((acc, item) => acc + (item.qty || 1), 0);
+
   return (
-    <CartContext.Provider value={{ cart: safeCart, addToCart, removeFromCart, clearCart, totalAmount }}>
+    <CartContext.Provider value={{ cart: safeCart, addToCart, removeFromCart, clearCart, totalAmount, totalItems }}>
       {children}
     </CartContext.Provider>
   );
