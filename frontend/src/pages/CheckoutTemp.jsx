@@ -27,7 +27,7 @@ export default function Checkout() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
 
-  // 1. Charger les frais de livraison dynamiques depuis la route publique Backend
+  // 1. Charger la configuration et les wilayas actives depuis le backend
   useEffect(() => {
     axios.get(`${API_URL}/shipping-rates`)
       .then(res => {
@@ -51,7 +51,6 @@ export default function Checkout() {
     }
   };
 
-  // 3. Helper robuste pour construire l'URL valide de l'image du produit
   const getImageUrl = (item) => {
     if (!item) return '/placeholder.png';
 
@@ -68,7 +67,6 @@ export default function Checkout() {
     return `${cleanBaseUrl}/uploads/${fileName}`;
   };
 
-  // Calculs du Sous-total et du Total Global
   const subtotal = totalAmount || cart.reduce((sum, item) => {
     const p = Number(item.has_promo ? item.final_price : (item.promo_price ?? item.price ?? item.original_price ?? 0));
     const q = item.qty || item.quantity || 1;
@@ -77,7 +75,6 @@ export default function Checkout() {
 
   const grandTotal = subtotal + (shippingEnabled ? selectedShippingCost : 0);
 
-  // 4. Soumission de la commande vers l'API
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
 
@@ -176,7 +173,7 @@ export default function Checkout() {
                 />
               </div>
 
-              {/* GRILLE TÉLÉPHONE & WILAYA (Si activée) */}
+              {/* TÉLÉPHONE & WILAYA DYNAMIQUE */}
               <div className={`grid grid-cols-1 ${shippingEnabled ? 'sm:grid-cols-2' : ''} gap-4`}>
                 <div>
                   <label className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1.5 font-medium">Téléphone *</label>
@@ -191,7 +188,7 @@ export default function Checkout() {
                   />
                 </div>
 
-                {/* CHAMP WILAYA - MENU DÉROULANT SI TOGGLE ON / SUPPRIMÉ SI TOGGLE OFF */}
+                {/* MENU DÉROULANT DES WILAYAS (AFFICHE UNIQUEMENT SI TOGGLE LILVRAISON = ACTIF) */}
                 {shippingEnabled && (
                   <div>
                     <label className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1.5 font-medium">Wilaya de Livraison *</label>
@@ -244,7 +241,7 @@ export default function Checkout() {
             </form>
           </div>
 
-          {/* RÉCAPITULATIF DU PANIER */}
+          {/* RÉCAPITULATIF PANIER */}
           <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-stone-200/60 shadow-xs space-y-6">
             <h2 className="font-serif text-xl text-stone-900 pb-4 border-b border-stone-100">Récapitulatif</h2>
 

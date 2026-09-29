@@ -22,6 +22,7 @@ router.delete('/categories/:id', auth, categoriesController.delete);
 router.post('/products', auth, upload.array('images', 10), productsController.create);
 router.put('/products/:id', auth, upload.array('images', 10), productsController.update);
 router.delete('/products/:id', auth, productsController.delete);
+router.post('/products/import', auth, productsController.bulkImport);
 
 // Packs (Admin)
 router.get('/packs', auth, packsController.getAll);

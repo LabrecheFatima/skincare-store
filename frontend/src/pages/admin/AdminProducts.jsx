@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
+import { read, utils } from 'xlsx';
 import { 
   Package, 
   Plus, 
@@ -12,7 +13,12 @@ import {
   AlertCircle,
   AlertTriangle,
   Eye,
-  EyeOff
+  EyeOff,
+  FileSpreadsheet,
+  HelpCircle,
+  CheckCircle2,
+  FileCode,
+  Info
 } from 'lucide-react';
 
 export default function AdminProducts() {
@@ -21,15 +27,22 @@ export default function AdminProducts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+
+  // État pour la notification / Toast stylé
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // État pour la modal du guide CSV/Excel
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   // États pour la modal de création / édition
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
   // Gestion de plusieurs images
-  const [imageFiles, setImageFiles] = useState([]); // Nouveaux fichiers à uploader
-  const [existingImages, setExistingImages] = useState([]); // URL des images déjà existantes
-  const [imagesToDelete, setImagesToDelete] = useState([]); // Images existantes marquées pour suppression
+  const [imageFiles, setImageFiles] = useState([]);
+  const [existingImages, setExistingImages] = useState([]);
+  const [imagesToDelete, setImagesToDelete] = useState([]);
 
   // État pour la modal de confirmation de suppression
   const [deletingProduct, setDeletingProduct] = useState(null);
@@ -47,6 +60,14 @@ export default function AdminProducts() {
     stock_quantity: '',
     is_active: 1
   });
+
+  // Utilitaire pour afficher les notifications toast
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 4500);
+  };
 
   // Charger les produits et les catégories
   const fetchData = async () => {
@@ -116,7 +137,6 @@ export default function AdminProducts() {
     setImageFiles([]);
     setImagesToDelete([]);
 
-    // Extraire les images existantes (soit product.images s'il s'agit d'un tableau, soit product.image_url)
     const imgs = product.images 
       ? product.images 
       : product.image_url 
@@ -174,12 +194,10 @@ export default function AdminProducts() {
     data.append('stock_quantity', formData.stock_quantity);
     data.append('is_active', formData.is_active);
 
-    // Ajout de chaque nouvelle image sous le champ 'images' ou 'images[]'
     imageFiles.forEach((file) => {
       data.append('images', file);
     });
 
-    // Envoi des images à supprimer si nécessaire
     if (imagesToDelete.length > 0) {
       data.append('delete_images', JSON.stringify(imagesToDelete));
     }
@@ -189,16 +207,18 @@ export default function AdminProducts() {
         await api.put(`/admin/products/${editingProduct.id}`, data, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
+        showToast('Produit mis à jour avec succès !', 'success');
       } else {
         await api.post('/admin/products', data, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
+        showToast('Nouveau produit ajouté au catalogue !', 'success');
       }
 
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Erreur lors de l’enregistrement du produit.');
+      showToast(err.response?.data?.error || 'Erreur lors de l’enregistrement du produit.', 'error');
     }
   };
 
@@ -210,9 +230,10 @@ export default function AdminProducts() {
     try {
       await api.delete(`/admin/products/${deletingProduct.id}`);
       setProducts(prev => prev.filter(p => p.id !== deletingProduct.id));
+      showToast(`Le produit "${deletingProduct.name}" a été supprimé.`, 'success');
       setDeletingProduct(null);
     } catch (err) {
-      alert(err.response?.data?.error || 'Erreur lors de la suppression.');
+      showToast(err.response?.data?.error || 'Erreur lors de la suppression.', 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -223,21 +244,116 @@ export default function AdminProducts() {
     p.slug?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Importation CSV / Excel avec gestion des erreurs et toast
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsImporting(true);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = read(data);
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+
+      const jsonProducts = utils.sheet_to_json(worksheet);
+
+      if (jsonProducts.length === 0) {
+        showToast("Le fichier importé est vide ou contient une syntaxe invalide.", "error");
+        setIsImporting(false);
+        return;
+      }
+
+      const response = await api.post('/admin/products/import', { products: jsonProducts });
+      showToast(response.data.message || 'Importation terminée avec succès !', 'success');
+      
+      fetchData();
+    } catch (err) {
+      console.error("Erreur d'importation :", err);
+      const errorMsg = err.response?.data?.error || "Erreur de traitement. Vérifiez la structure de votre fichier CSV/Excel.";
+      showToast(errorMsg, "error");
+    } finally {
+      setIsImporting(false);
+      e.target.value = '';
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      
+      {/* 🟢 Toast Stylé de Notification (Success / Error) */}
+      {toast.show && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className={`flex items-center gap-3.5 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all max-w-md ${
+            toast.type === 'success' 
+              ? 'bg-stone-900/95 text-stone-100 border-stone-800' 
+              : 'bg-rose-950/95 text-rose-100 border-rose-900'
+          }`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+              toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+            }`}>
+              {toast.type === 'success' ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+            </div>
+
+            <div className="flex-1 pr-2">
+              <p className="text-[11px] font-semibold tracking-wider uppercase text-stone-400">
+                {toast.type === 'success' ? 'Confirmation' : 'Erreur d\'Importation'}
+              </p>
+              <p className="text-xs font-medium text-stone-200 mt-0.5 leading-snug">
+                {toast.message}
+              </p>
+            </div>
+
+            <button 
+              onClick={() => setToast({ ...toast, show: false })}
+              className="p-1 text-stone-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* En-tête */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-xs">
         <div>
           <h2 className="text-2xl font-serif text-stone-900">Gestion du Catalogue</h2>
           <p className="text-xs text-stone-500 mt-1">Ajoutez, modifiez et gérez les produits de votre boutique</p>
         </div>
-        <button
-          onClick={handleOpenAddModal}
-          className="px-4 py-2.5 bg-stone-900 text-white rounded-xl text-xs font-medium hover:bg-stone-800 transition-colors flex items-center gap-2 self-start sm:self-auto cursor-pointer"
-        >
-          <Plus size={16} />
-          Nouveau Produit
-        </button>
+
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+          {/* Bouton Guide d'Importation */}
+          <button
+            onClick={() => setIsGuideOpen(true)}
+            className="p-2.5 text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Guide de syntaxe CSV/Excel"
+          >
+            <HelpCircle size={17} />
+            <span className="hidden md:inline">Syntaxe CSV/Excel</span>
+          </button>
+
+          {/* Bouton d'importation Excel / CSV */}
+          <label className={`px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-medium transition-colors flex items-center gap-2 cursor-pointer ${isImporting ? 'opacity-50 pointer-events-none' : ''}`}>
+            <FileSpreadsheet size={16} />
+            {isImporting ? 'Importation...' : 'Importer CSV/Excel'}
+            <input 
+              type="file" 
+              accept=".csv, .xlsx, .xls" 
+              onChange={handleFileUpload} 
+              className="hidden" 
+            />
+          </label>
+
+          {/* Bouton Nouveau Produit */}
+          <button
+            onClick={handleOpenAddModal}
+            className="px-4 py-2.5 bg-stone-900 text-white rounded-xl text-xs font-medium hover:bg-stone-800 transition-colors flex items-center gap-2 cursor-pointer"
+          >
+            <Plus size={16} />
+            Nouveau Produit
+          </button>
+        </div>
       </div>
 
       {/* Barre de recherche */}
@@ -291,10 +407,16 @@ export default function AdminProducts() {
                           <div className="w-12 h-12 rounded-lg bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center">
                             {mainImage ? (
                               <img
-                                src={`${api.defaults.baseURL.replace('/api', '')}${mainImage}`}
-                                alt={product.name}
-                                className="w-full h-full object-cover"
-                              />
+                                  src={
+                                    !mainImage 
+                                      ? '' 
+                                      : mainImage.startsWith('http') 
+                                      ? mainImage 
+                                      : `${api.defaults.baseURL.replace('/api', '')}${mainImage.startsWith('/') ? '' : '/'}${mainImage}`
+                                  }
+                                  alt={product.name}
+                                  className="w-full h-full object-cover"
+                                />
                             ) : (
                               <Package size={20} className="text-stone-400" />
                             )}
@@ -364,6 +486,113 @@ export default function AdminProducts() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* 📘 Modal Guide Syntaxe CSV / Excel */}
+      {isGuideOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden border border-stone-200 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-stone-200 bg-stone-50/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                  <FileCode size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif font-medium text-stone-900">Guide Importation CSV / Excel</h3>
+                  <p className="text-xs text-stone-500">Règles de structure et bonnes pratiques</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsGuideOpen(false)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 overflow-y-auto text-xs text-stone-700 leading-relaxed">
+              
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex items-start gap-2.5">
+                <Info size={18} className="shrink-0 mt-0.5" />
+                <p>
+                  Les entêtes de votre tableau Excel ou CSV doivent <strong>strictement correspondre</strong> aux noms ci-dessous (en minuscules).
+                </p>
+              </div>
+
+              {/* Tableau des colonnes */}
+              <div className="border border-stone-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-stone-100 text-[11px] uppercase font-semibold text-stone-600">
+                    <tr>
+                      <th className="p-2.5 border-b">Nom Colonne</th>
+                      <th className="p-2.5 border-b">Requis</th>
+                      <th className="p-2.5 border-b">Exemple / Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-200 font-mono text-[11px]">
+                    <tr>
+                      <td className="p-2.5 font-bold text-emerald-800">name</td>
+                      <td className="p-2.5 text-rose-600 font-sans">Oui</td>
+                      <td className="p-2.5 font-sans">Sérum Visage Hydratant</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 font-bold text-emerald-800">original_price</td>
+                      <td className="p-2.5 text-rose-600 font-sans">Oui</td>
+                      <td className="p-2.5 font-sans">Nombre entier ex: 4500</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 text-stone-800">category_id</td>
+                      <td className="p-2.5 text-stone-400 font-sans">Non</td>
+                      <td className="p-2.5 font-sans">ID numérique de la catégorie (ex: 1)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 text-stone-800">promo_price</td>
+                      <td className="p-2.5 text-stone-400 font-sans">Non</td>
+                      <td className="p-2.5 font-sans">Prix promo (laisser vide si aucun)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 text-stone-800">stock_quantity</td>
+                      <td className="p-2.5 text-stone-400 font-sans">Non</td>
+                      <td className="p-2.5 font-sans">Nombre d'articles (défaut: 0)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 text-stone-800">slug</td>
+                      <td className="p-2.5 text-stone-400 font-sans">Non</td>
+                      <td className="p-2.5 font-sans">Ex: serum-visage. Généré si vide.</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 text-stone-800">is_active</td>
+                      <td className="p-2.5 text-stone-400 font-sans">Non</td>
+                      <td className="p-2.5 font-sans">1 (Visible) ou 0 (Masqué)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Erreurs fréquentes */}
+              <div>
+                <h4 className="font-semibold text-stone-900 mb-2">⚠️ Résolution des Erreurs Fréquentes :</h4>
+                <ul className="list-disc pl-5 space-y-1 text-stone-600">
+                  <li><strong>L'importation échoue à 100% :</strong> Vérifiez si <code className="bg-stone-100 px-1 py-0.5 rounded">name</code> ou <code className="bg-stone-100 px-1 py-0.5 rounded">original_price</code> contiennent des valeurs manquées.</li>
+                  <li><strong>Contrainte de catégorie :</strong> Si vous entrez une <code className="bg-stone-100 px-1 py-0.5 rounded">category_id</code> qui n'existe pas en base, elle sera enregistrée comme vide (sans catégorie).</li>
+                  <li><strong>Formats de prix :</strong> Évitez les symboles comme <code className="bg-stone-100 px-1 py-0.5 rounded">DA</code> ou les virgules dans les chiffres (utilisez <code className="bg-stone-100 px-1 py-0.5 rounded">4500</code> et non <code className="bg-stone-100 px-1 py-0.5 rounded">4 500 DA</code>).</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="p-4 bg-stone-50 border-t border-stone-200 flex justify-end">
+              <button
+                onClick={() => setIsGuideOpen(false)}
+                className="px-5 py-2 bg-stone-900 text-white rounded-xl text-xs font-medium hover:bg-stone-800 transition-colors cursor-pointer"
+              >
+                Compris
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -574,7 +803,7 @@ export default function AdminProducts() {
                     </div>
                   ))}
 
-                  {/* Nouvelles images ajoutées (non encore uploadées) */}
+                  {/* Nouvelles images ajoutées */}
                   {imageFiles.map((file, idx) => (
                     <div key={`new-${idx}`} className="relative group aspect-square rounded-lg overflow-hidden border border-emerald-300 bg-emerald-50">
                       <img

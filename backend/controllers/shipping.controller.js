@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-// Récupérer la configuration globale + liste des wilayas
+// Récupérer la configuration globale + liste des wilayas actives pour le site public
 exports.getShippingInfo = async (req, res) => {
   try {
     const setting = await db('settings').where({ key: 'shipping_enabled' }).first();
@@ -17,7 +17,7 @@ exports.getShippingInfo = async (req, res) => {
   }
 };
 
-// [ADMIN] Basculer le Toggle ON/OFF
+// [ADMIN] Basculer le Toggle ON/OFF global
 exports.toggleShipping = async (req, res) => {
   const { enabled } = req.body;
   try {
@@ -36,7 +36,7 @@ exports.toggleShipping = async (req, res) => {
   }
 };
 
-// [ADMIN] Récupérer tous les tarifs (y compris inactifs)
+// [ADMIN] Récupérer tous les tarifs (actifs et inactifs)
 exports.getAllRates = async (req, res) => {
   try {
     const rates = await db('shipping_rates').orderBy('wilaya_name', 'asc');

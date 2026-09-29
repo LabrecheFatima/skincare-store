@@ -3,7 +3,7 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 
-// Fonction utilitaire pour traiter et enregistrer une image
+// Fonction utilitaire pour traiter et enregistrer une image via formulaire
 async function processAndSaveImage(file) {
   const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.webp';
   const outputPath = path.join(__dirname, '..', 'uploads', filename);
@@ -17,6 +17,26 @@ async function processAndSaveImage(file) {
     fs.unlinkSync(file.path);
   }
   return '/uploads/' + filename;
+}
+
+// Fonction utilitaire pour normaliser les chemins d'images provenant du CSV/Excel
+function normalizeImageUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  
+  let formatted = rawUrl.trim();
+  if (!formatted) return null;
+
+  // Ne pas modifier les URLs distantes (ex: http:// ou https://)
+  if (formatted.startsWith('http://') || formatted.startsWith('https://')) {
+    return formatted;
+  }
+
+  // S'assurer que le chemin commence toujours par un '/'
+  if (!formatted.startsWith('/')) {
+    formatted = '/' + formatted;
+  }
+
+  return formatted;
 }
 
 exports.getAll = async (req, res) => {
@@ -116,7 +136,7 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   const { id } = req.params;
-  const { category_id, name, slug, description, composition, conseil_utilisation, original_price, promo_price, stock_quantity, is_active, delete_images } = req.body;
+  const { category_id, name, slug, description, conseil_utilisation, composition, original_price, promo_price, stock_quantity, is_active, delete_images } = req.body;
 
   try {
     const updateData = {
@@ -165,7 +185,7 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   const { id } = req.params;
   try {
-    // 1. (Optionnel) Supprimer les images associées
+    // 1. Supprimer les images associées
     await db('product_images').where({ product_id: id }).del();
     
     // 2. Supprimer le produit
@@ -178,5 +198,85 @@ exports.delete = async (req, res) => {
     res.json({ message: 'Produit supprimé avec succès' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+// Importation en masse de produits depuis un tableau JSON (CSV/Excel)
+exports.bulkImport = async (req, res) => {
+  const { products } = req.body;
+
+  if (!Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ error: 'Aucun produit valide n\'a été fourni.' });
+  }
+
+  try {
+    const insertedProducts = [];
+
+    // 1. Récupérer les IDs de catégories existantes pour éviter les erreurs de clé étrangère
+    const existingCategories = await db('categories').select('id');
+    const validCategoryIds = new Set(existingCategories.map(c => c.id));
+
+    // 2. Transaction SQL
+    await db.transaction(async (trx) => {
+      for (const item of products) {
+        // Ignorer les lignes sans nom ou sans prix
+        if (!item.name || item.original_price === undefined || item.original_price === null) {
+          continue;
+        }
+
+        // Valider l'ID de catégorie
+        const categoryId = item.category_id && validCategoryIds.has(Number(item.category_id))
+          ? Number(item.category_id)
+          : null;
+
+        // Générer un slug unique avec horodatage pour éviter les erreurs de doublon
+        const baseSlug = (item.slug || item.name)
+          .toString()
+          .toLowerCase()
+          .trim()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/[\s_-]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        
+        const uniqueSlug = `${baseSlug}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+        // Traitement et nettoyage du chemin de l'image issue du CSV
+        const rawImg = item.image_url || item.image || item.images || null;
+        const formattedImageUrl = normalizeImageUrl(rawImg);
+
+        // Insertion du produit
+        const [productId] = await trx('products').insert({
+          category_id: categoryId,
+          name: item.name,
+          slug: uniqueSlug,
+          description: item.description || '',
+          composition: item.composition || '',
+          conseil_utilisation: item.conseil_utilisation || '',
+          original_price: Number(item.original_price),
+          promo_price: item.promo_price ? Number(item.promo_price) : null,
+          stock_quantity: item.stock_quantity ? Number(item.stock_quantity) : 0,
+          image_url: formattedImageUrl,
+          is_active: item.is_active !== undefined ? Number(item.is_active) : 1
+        });
+
+        // Insertion de l'image dans product_images si présente
+        if (formattedImageUrl) {
+          await trx('product_images').insert({
+            product_id: productId,
+            image_url: formattedImageUrl
+          });
+        }
+
+        insertedProducts.push(productId);
+      }
+    });
+
+    return res.status(201).json({
+      message: `${insertedProducts.length} produit(s) importé(s) avec succès.`,
+      count: insertedProducts.length
+    });
+  } catch (err) {
+    console.error('Erreur détails bulkImport:', err);
+    return res.status(500).json({ error: 'Erreur serveur lors de l\'importation : ' + err.message });
   }
 };
