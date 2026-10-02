@@ -1,104 +1,92 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import api from '../../../services/api';
+import React, { useState, useEffect } from 'react';
 import { 
-  ShoppingBag, 
-  Search, 
-  Filter, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  ChevronDown, 
-  Trash2, 
-  Edit3, 
-  X, 
-  Check, 
-  AlertCircle,
-  AlertTriangle,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  ChevronLeft,
-  ChevronRight
+  Package, Search, Filter, RefreshCw, ChevronDown, ChevronUp, 
+  Trash2, Edit, Check, X, Phone, MapPin, User, ArrowUpDown, Clock
 } from 'lucide-react';
 
-export default function AdminOrders() {
+const AdminOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Filtres
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [updatingId, setUpdatingId] = useState(null);
-
-  // Tri
-  const [sortField, setSortField] = useState('created_at'); // 'created_at' | 'total_amount' | 'id'
-  const [sortOrder, setSortOrder] = useState('desc'); // 'asc' | 'desc'
-
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-
-  // Modales
-  const [editingOrder, setEditingOrder] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
-  const [deletingOrder, setDeletingOrder] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
-  const fetchOrders = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get('/admin/orders');
-      setOrders(response.data || []);
-    } catch (err) {
-      console.error('Erreur lors du chargement des commandes :', err);
-      setError(err.response?.data?.error || 'Impossible de charger les commandes.');
-    } finally {
-      setLoading(false);
-    }
+  // Récupération des headers d'authentification
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
   };
 
   useEffect(() => {
     fetchOrders();
   }, []);
 
-  // Réinitialiser la page courante quand on filtre ou recherche
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, itemsPerPage]);
-
-  // Changement de statut
-  const handleStatusChange = async (orderId, newStatus) => {
-    setUpdatingId(orderId);
+  const fetchOrders = async () => {
+    setLoading(true);
     try {
-      await api.put(`/admin/orders/${orderId}/status`, { status: newStatus });
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      const response = await fetch('/api/admin/orders', {
+        headers: getAuthHeaders()
+      });
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Réponse non-JSON reçue :", text);
+        throw new Error("Le serveur a renvoyé du HTML. Vérifiez votre connexion ou l'URL backend.");
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erreur lors de la récupération des commandes');
+      }
+
+      const data = await response.json();
+      setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      alert(err.response?.data?.error || 'Erreur lors de la mise à jour du statut.');
+      console.error("Erreur chargement commandes :", err);
     } finally {
-      setUpdatingId(null);
+      setLoading(false);
     }
   };
 
-  // Suppression
-  const handleConfirmDelete = async () => {
-    if (!deletingOrder) return;
-    setIsDeleting(true);
+  const handleStatusChange = async (id, newStatus) => {
     try {
-      await api.delete(`/admin/orders/${deletingOrder.id}`);
-      setOrders(prev => prev.filter(o => o.id !== deletingOrder.id));
-      setDeletingOrder(null);
+      // Corrected: PUT method according to admin.routes.js
+      const response = await fetch(`/api/admin/orders/${id}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (response.ok) {
+        setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
+      }
     } catch (err) {
-      alert(err.response?.data?.error || 'Erreur lors de la suppression de la commande.');
-    } finally {
-      setIsDeleting(false);
+      console.error("Erreur mise à jour statut:", err);
     }
   };
 
-  // Édition
+  const handleDelete = async (id) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette commande ?")) return;
+    try {
+      const response = await fetch(`/api/admin/orders/${id}`, { 
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (response.ok) {
+        setOrders(orders.filter(o => o.id !== id));
+      }
+    } catch (err) {
+      console.error("Erreur suppression:", err);
+    }
+  };
+
   const handleStartEdit = (order) => {
-    setEditingOrder(order);
+    setEditingId(order.id);
     setEditFormData({
       customer_first_name: order.customer_first_name || '',
       customer_last_name: order.customer_last_name || '',
@@ -110,151 +98,151 @@ export default function AdminOrders() {
     });
   };
 
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
+  const handleSaveEdit = async (id) => {
     try {
-      await api.put(`/admin/orders/${editingOrder.id}/details`, editFormData);
-      setOrders(prev => prev.map(o => o.id === editingOrder.id ? { ...o, ...editFormData } : o));
-      setEditingOrder(null);
+      // Corrected: PUT method according to admin.routes.js
+      const response = await fetch(`/api/admin/orders/${id}/details`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(editFormData),
+      });
+      if (response.ok) {
+        setOrders(orders.map(o => o.id === id ? { ...o, ...editFormData } : o));
+        setEditingId(null);
+      }
     } catch (err) {
-      alert(err.response?.data?.error || 'Erreur lors de la modification de la commande.');
+      console.error("Erreur modification:", err);
     }
   };
 
-  // Gérer le changement de colonne de tri
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortOrder('desc');
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
     }
+    setSortConfig({ key, direction });
   };
 
-  // 1. Filtrage + 2. Tri + 3. Pagination
-  const processedOrders = useMemo(() => {
-    // 1. Filtrage
-    let filtered = orders.filter(order => {
+  // Filtering and Sorting
+  const filteredOrders = orders
+    .filter(order => {
       const fullName = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.toLowerCase();
       const phone = order.customer_phone || '';
-      const wilaya = (order.wilaya || '').toLowerCase();
-      const orderId = order.id.toString();
+      const wilaya = order.wilaya || '';
+      const idStr = order.id ? order.id.toString() : '';
 
       const matchesSearch = 
         fullName.includes(searchTerm.toLowerCase()) ||
         phone.includes(searchTerm) ||
-        wilaya.includes(searchTerm.toLowerCase()) ||
-        orderId.includes(searchTerm);
-
-      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-
+        idStr.includes(searchTerm) ||
+        wilaya.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
+      
       return matchesSearch && matchesStatus;
-    });
-
-    // 2. Tri
-    filtered.sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-
-      if (sortField === 'created_at') {
-        valA = new Date(valA || 0).getTime();
-        valB = new Date(valB || 0).getTime();
-      } else if (sortField === 'total_amount' || sortField === 'id') {
-        valA = Number(valA || 0);
-        valB = Number(valB || 0);
-      }
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    })
+    .sort((a, b) => {
+      if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
 
-    return filtered;
-  }, [orders, searchTerm, statusFilter, sortField, sortOrder]);
+  const getStatusBadge = (status) => {
+    const styles = {
+      en_attente: 'bg-amber-50 text-amber-700 border-amber-200',
+      confirmee: 'bg-blue-50 text-blue-700 border-blue-200',
+      expediee: 'bg-purple-50 text-purple-700 border-purple-200',
+      livree: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      annulee: 'bg-rose-50 text-rose-700 border-rose-200'
+    };
+    const labels = {
+      en_attente: 'En attente',
+      confirmee: 'Confirmée',
+      expediee: 'Expédiée',
+      livree: 'Livrée',
+      annulee: 'Annulée'
+    };
+    return (
+      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${styles[status] || 'bg-stone-100 text-stone-600'}`}>
+        {labels[status] || status}
+      </span>
+    );
+  };
 
-  // Calculs pour la pagination
-  const totalItems = processedOrders.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return processedOrders.slice(start, start + itemsPerPage);
-  }, [processedOrders, currentPage, itemsPerPage]);
-
-  const renderSortIcon = (field) => {
-    if (sortField !== field) return <ArrowUpDown size={13} className="text-stone-300 group-hover:text-stone-500 transition-colors" />;
-    return sortOrder === 'asc' ? <ArrowUp size={13} className="text-stone-900" /> : <ArrowDown size={13} className="text-stone-900" />;
+  const renderSortIcon = (key) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="w-3.5 h-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />;
+    return sortConfig.direction === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-stone-700" /> : <ChevronDown className="w-3.5 h-3.5 text-stone-700" />;
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-xs">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* En-tête */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-serif text-stone-900">Gestion des Commandes</h2>
-          <p className="text-xs text-stone-500 mt-1">Consultez, modifiez et gérez les commandes de la boutique</p>
+          <h1 className="text-2xl font-bold text-stone-900 flex items-center gap-2">
+            <Package className="w-7 h-7 text-stone-800" />
+            Gestion des Commandes
+          </h1>
+          <p className="text-sm text-stone-500 mt-1">
+            Consultez, gérez et suivez l'état des commandes enregistrées.
+          </p>
         </div>
-        <span className="text-xs font-semibold px-3 py-1.5 bg-stone-100 text-stone-700 rounded-lg border border-stone-200 self-start sm:self-auto">
-          Total : {orders.length}
-        </span>
+        <button
+          onClick={fetchOrders}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 text-white text-sm font-medium rounded-lg hover:bg-stone-800 transition-colors shadow-sm self-start md:self-auto"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Actualiser
+        </button>
       </div>
 
-      {/* Barre de Recherche & Filtres */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+      {/* Recherche et Filtre */}
+      <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+        <div className="relative w-full md:w-96">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input
             type="text"
-            placeholder="Rechercher par client, téléphone, wilaya ou N°..."
+            placeholder="Rechercher par nom, téléphone, ID, wilaya..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 transition-colors"
+            className="w-full pl-9 pr-4 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 transition-all"
           />
         </div>
 
-        <div className="relative w-full sm:w-56">
-          <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <Filter className="w-4 h-4 text-stone-500 shrink-0" />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full pl-10 pr-8 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 appearance-none transition-colors cursor-pointer"
+            className="w-full md:w-auto px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 bg-white"
           >
-            <option value="all">Tous les statuts</option>
+            <option value="ALL">Tous les statuts</option>
             <option value="en_attente">En attente</option>
             <option value="confirmee">Confirmée</option>
-            <option value="en_livraison">En livraison</option>
+            <option value="expediee">Expédiée</option>
             <option value="livree">Livrée</option>
             <option value="annulee">Annulée</option>
           </select>
-          <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" size={16} />
         </div>
       </div>
 
-      {/* Table & État */}
-      {loading ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-stone-200">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-stone-900 border-t-transparent"></div>
-          <p className="text-sm text-stone-500 mt-3">Chargement des commandes...</p>
-        </div>
-      ) : error ? (
-        <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 flex items-center gap-3 text-sm">
-          <AlertCircle size={20} />
-          <span>{error}</span>
-        </div>
-      ) : paginatedOrders.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-stone-200">
-          <ShoppingBag className="mx-auto text-stone-300 mb-3" size={40} />
-          <p className="text-stone-700 font-medium text-base">Aucune commande trouvée</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
+      {/* Tableau des Commandes */}
+      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-12 text-center text-stone-500 flex flex-col items-center gap-3">
+            <RefreshCw className="w-6 h-6 animate-spin text-stone-400" />
+            <span>Chargement des commandes...</span>
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="p-12 text-center text-stone-500">
+            Aucune commande trouvée.
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-stone-50/80 border-b border-stone-200 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-                  <th 
-                    onClick={() => handleSort('id')}
-                    className="py-3.5 px-6 cursor-pointer select-none group hover:bg-stone-100/60 transition-colors"
-                  >
+                  <th onClick={() => handleSort('id')} className="py-3.5 px-6 cursor-pointer select-none group hover:bg-stone-100/60 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span>N° / Date</span>
                       {renderSortIcon('id')}
@@ -262,10 +250,8 @@ export default function AdminOrders() {
                   </th>
                   <th className="py-3.5 px-6">Client & Contact</th>
                   <th className="py-3.5 px-6">Adresse & Wilaya</th>
-                  <th 
-                    onClick={() => handleSort('total_amount')}
-                    className="py-3.5 px-6 cursor-pointer select-none group hover:bg-stone-100/60 transition-colors"
-                  >
+                  <th className="py-3.5 px-6">Produits commandés</th>
+                  <th onClick={() => handleSort('total_amount')} className="py-3.5 px-6 cursor-pointer select-none group hover:bg-stone-100/60 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span>Montant</span>
                       {renderSortIcon('total_amount')}
@@ -276,285 +262,190 @@ export default function AdminOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-sm">
-                {paginatedOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <span className="font-mono font-semibold text-stone-900">#{order.id}</span>
-                      {order.created_at && (
-                        <p className="text-[11px] text-stone-400 flex items-center gap-1 mt-0.5">
-                          <Calendar size={12} />
-                          {new Date(order.created_at).toLocaleDateString('fr-FR')}
-                        </p>
-                      )}
-                    </td>
+                {filteredOrders.map((order) => {
+                  const isEditing = editingId === order.id;
 
-                    <td className="py-4 px-6">
-                      <p className="font-medium text-stone-900">
-                        {order.customer_first_name} {order.customer_last_name}
-                      </p>
-                      <a href={`tel:${order.customer_phone}`} className="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
-                        <Phone size={12} />
-                        {order.customer_phone}
-                      </a>
-                    </td>
-
-                    <td className="py-4 px-6">
-                      <div className="flex items-start gap-1">
-                        <MapPin size={14} className="text-stone-400 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-medium text-stone-800">{order.wilaya} {order.commune && `(${order.commune})`}</p>
-                          <p className="text-xs text-stone-500 line-clamp-1">{order.delivery_address}</p>
+                  return (
+                    <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
+                      {/* ID & Date */}
+                      <td className="py-4 px-6 font-mono text-xs text-stone-600 align-top">
+                        <div className="font-semibold text-stone-900">#{order.id}</div>
+                        <div className="text-[11px] text-stone-400 mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {order.created_at ? new Date(order.created_at).toLocaleDateString('fr-FR', {
+                            day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+                          }) : '-'}
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="py-4 px-6">
-                      <p className="font-semibold text-stone-900">{order.total_amount} DA</p>
-                    </td>
+                      {/* Client */}
+                      <td className="py-4 px-6 align-top">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="Prénom"
+                              value={editFormData.customer_first_name}
+                              onChange={(e) => setEditFormData({ ...editFormData, customer_first_name: e.target.value })}
+                              className="w-full px-2 py-1 text-xs border border-stone-300 rounded"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Nom"
+                              value={editFormData.customer_last_name}
+                              onChange={(e) => setEditFormData({ ...editFormData, customer_last_name: e.target.value })}
+                              className="w-full px-2 py-1 text-xs border border-stone-300 rounded"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Téléphone"
+                              value={editFormData.customer_phone}
+                              onChange={(e) => setEditFormData({ ...editFormData, customer_phone: e.target.value })}
+                              className="w-full px-2 py-1 text-xs border border-stone-300 rounded"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-medium text-stone-900 flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-stone-400" />
+                              {order.customer_first_name} {order.customer_last_name}
+                            </div>
+                            <div className="text-xs text-stone-500 mt-1 flex items-center gap-1.5">
+                              <Phone className="w-3.5 h-3.5 text-stone-400" />
+                              {order.customer_phone}
+                            </div>
+                          </div>
+                        )}
+                      </td>
 
-                    <td className="py-4 px-6">
-                      <select
-                        value={order.status}
-                        disabled={updatingId === order.id}
-                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                        className="text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-800 py-1.5 px-2.5 rounded-lg border border-stone-300 focus:outline-none cursor-pointer transition-colors"
-                      >
-                        <option value="en_attente">En attente</option>
-                        <option value="confirmee">Confirmée</option>
-                        <option value="en_livraison">En livraison</option>
-                        <option value="livree">Livrée</option>
-                        <option value="annulee">Annulée</option>
-                      </select>
-                    </td>
+                      {/* Adresse */}
+                      <td className="py-4 px-6 align-top">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="Wilaya"
+                              value={editFormData.wilaya}
+                              onChange={(e) => setEditFormData({ ...editFormData, wilaya: e.target.value })}
+                              className="w-full px-2 py-1 text-xs border border-stone-300 rounded"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Commune"
+                              value={editFormData.commune}
+                              onChange={(e) => setEditFormData({ ...editFormData, commune: e.target.value })}
+                              className="w-full px-2 py-1 text-xs border border-stone-300 rounded"
+                            />
+                            <textarea
+                              placeholder="Adresse de livraison"
+                              value={editFormData.delivery_address}
+                              onChange={(e) => setEditFormData({ ...editFormData, delivery_address: e.target.value })}
+                              className="w-full px-2 py-1 text-xs border border-stone-300 rounded"
+                              rows={2}
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-medium text-stone-800 flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-stone-400" />
+                              {order.wilaya} {order.commune ? `(${order.commune})` : ''}
+                            </div>
+                            <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">
+                              {order.delivery_address}
+                            </div>
+                          </div>
+                        )}
+                      </td>
 
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleStartEdit(order)}
-                          className="p-2 text-stone-600 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
-                          title="Modifier la commande"
+                      {/* Produits commandés */}
+                      <td className="py-4 px-6 align-top">
+                        {order.items && order.items.length > 0 ? (
+                          <div className="space-y-1 max-w-xs">
+                            {order.items.map((item, idx) => (
+                              <div key={item.id || idx} className="text-xs flex items-center justify-between gap-2 border-b border-stone-100 pb-1 last:border-none">
+                                <span className="font-medium text-stone-800 truncate" title={item.product_name}>
+                                  {item.product_name}
+                                </span>
+                                <span className="text-stone-500 shrink-0 font-mono">
+                                  x{item.quantity} ({item.unit_price} DA)
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-stone-400 italic">Aucun détail</span>
+                        )}
+                      </td>
+
+                      {/* Montant */}
+                      <td className="py-4 px-6 align-top font-semibold text-stone-900 font-mono">
+                        {order.total_amount} DA
+                      </td>
+
+                      {/* Statut */}
+                      <td className="py-4 px-6 align-top">
+                        <select
+                          value={order.status}
+                          onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                          className="text-xs border border-stone-200 rounded-md p-1 bg-stone-50 font-medium focus:outline-none focus:ring-1 focus:ring-stone-900 cursor-pointer"
                         >
-                          <Edit3 size={16} />
-                        </button>
-                        <button
-                          onClick={() => setDeletingOrder(order)}
-                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Supprimer la commande"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <option value="en_attente">En attente</option>
+                          <option value="confirmee">Confirmée</option>
+                          <option value="expediee">Expédiée</option>
+                          <option value="livree">Livrée</option>
+                          <option value="annulee">Annulée</option>
+                        </select>
+                        <div className="mt-1.5">{getStatusBadge(order.status)}</div>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-4 px-6 align-top text-right">
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleSaveEdit(order.id)}
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title="Enregistrer"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="p-1.5 text-stone-400 hover:bg-stone-100 rounded-lg transition-colors"
+                              title="Annuler"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleStartEdit(order)}
+                              className="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors"
+                              title="Éditer"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(order.id)}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-
-          {/* Barre de Pagination */}
-          <div className="px-6 py-4 bg-stone-50/50 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-600">
-            <div className="flex items-center gap-2">
-              <span>Afficher</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                className="px-2 py-1 bg-white border border-stone-200 rounded-lg font-medium focus:outline-none cursor-pointer"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-              <span>par page</span>
-              <span className="text-stone-400 ml-2">
-                ({(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, totalItems)} sur {totalItems})
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 border border-stone-200 rounded-lg hover:bg-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    currentPage === page
-                      ? 'bg-stone-900 text-white'
-                      : 'hover:bg-stone-200/60 text-stone-700'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 border border-stone-200 rounded-lg hover:bg-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Confirmation de Suppression */}
-      {deletingOrder && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-stone-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle size={24} />
-              </div>
-              
-              <h3 className="text-lg font-serif font-medium text-stone-900 mb-2">
-                Supprimer cette commande ?
-              </h3>
-              
-              <p className="text-xs text-stone-500 leading-relaxed mb-6">
-                Êtes-vous sûr de vouloir supprimer définitivement la commande <strong className="text-stone-800 font-semibold">#{deletingOrder.id}</strong> ({deletingOrder.customer_first_name} {deletingOrder.customer_last_name}) ? Cette action est irréversible.
-              </p>
-
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDeletingOrder(null)}
-                  disabled={isDeleting}
-                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-medium rounded-xl transition-colors cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDelete}
-                  disabled={isDeleting}
-                  className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {isDeleting ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Trash2 size={14} />
-                  )}
-                  Supprimer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Modification */}
-      {editingOrder && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden border border-stone-200">
-            <div className="flex items-center justify-between p-6 border-b border-stone-200">
-              <h3 className="text-lg font-serif text-stone-900">
-                Modifier la commande #{editingOrder.id}
-              </h3>
-              <button 
-                onClick={() => setEditingOrder(null)} 
-                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Prénom</label>
-                  <input
-                    type="text"
-                    value={editFormData.customer_first_name}
-                    onChange={(e) => setEditFormData({ ...editFormData, customer_first_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Nom</label>
-                  <input
-                    type="text"
-                    value={editFormData.customer_last_name}
-                    onChange={(e) => setEditFormData({ ...editFormData, customer_last_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-stone-700 mb-1">Téléphone</label>
-                <input
-                  type="text"
-                  value={editFormData.customer_phone}
-                  onChange={(e) => setEditFormData({ ...editFormData, customer_phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Wilaya</label>
-                  <input
-                    type="text"
-                    value={editFormData.wilaya}
-                    onChange={(e) => setEditFormData({ ...editFormData, wilaya: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Commune</label>
-                  <input
-                    type="text"
-                    value={editFormData.commune}
-                    onChange={(e) => setEditFormData({ ...editFormData, commune: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-stone-700 mb-1">Adresse de livraison</label>
-                <textarea
-                  value={editFormData.delivery_address}
-                  onChange={(e) => setEditFormData({ ...editFormData, delivery_address: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setEditingOrder(null)}
-                  className="px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-xs font-medium bg-stone-900 text-white hover:bg-stone-800 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check size={14} />
-                  Enregistrer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
-}
+};
+
+export default AdminOrders;

@@ -64,21 +64,10 @@ exports.create = async (req, res) => {
   }
 };
 
-// Dans orders.controller.js
-
 exports.getAll = async (req, res) => {
   try {
     const orders = await db('orders').select('*').orderBy('id', 'desc');
-
-    // Récupérer les articles pour chaque commande
-    const ordersWithItems = await Promise.all(
-      orders.map(async (order) => {
-        const items = await db('order_items').where({ order_id: order.id });
-        return { ...order, items };
-      })
-    );
-
-    res.json(ordersWithItems);
+    res.json(orders);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

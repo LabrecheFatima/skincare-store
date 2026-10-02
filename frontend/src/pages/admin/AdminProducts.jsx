@@ -452,7 +452,7 @@ export default function AdminProducts() {
                             ? 'bg-amber-50 text-amber-700 border-amber-200'
                             : 'bg-rose-50 text-rose-700 border-rose-200'
                         }`}>
-                          {product.stock_quantity} en stock
+                          {product.stock_quantity}
                         </span>
                       </td>
 

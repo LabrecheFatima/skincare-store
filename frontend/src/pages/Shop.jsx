@@ -7,6 +7,15 @@ import { API_URL } from '../config';
 
 const fmt = (n) => `${Number(n || 0).toLocaleString('fr-FR')} DA`;
 
+// Utility pour supprimer les accents et mettre en minuscules
+const normalizeText = (text = '') =>
+  text
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 export default function Shop() {
   const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
@@ -15,7 +24,10 @@ export default function Shop() {
 
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
+  // État de saisie directe et état de recherche (avec debounce)
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [priceRange, setPriceRange] = useState(20000);
   const [maxProductPrice, setMaxProductPrice] = useState(20000);
@@ -23,6 +35,14 @@ export default function Shop() {
 
   // Déduction de la base d'URL du serveur pour servir les images (/uploads)
   const serverBaseUrl = API_URL.replace(/\/api\/?$/, '');
+
+  // Debounce sur la barre de recherche pour une frappe ultra-fluide
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -69,9 +89,13 @@ export default function Shop() {
   };
 
   const filteredProducts = useMemo(() => {
+    const normalizedQuery = normalizeText(searchQuery);
+
     return products
       .filter(product => {
-        const matchName = product.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+        // Recherche insensible aux accents et à la casse
+        const matchName = normalizeText(product.name).includes(normalizedQuery);
+        
         const matchCategory = selectedCategory === 'all' || 
           product.category_id === Number(selectedCategory) || 
           product.category_slug === selectedCategory;
@@ -94,6 +118,7 @@ export default function Shop() {
   }, [products, searchQuery, selectedCategory, priceRange, sortBy]);
 
   const handleResetFilters = () => {
+    setSearchInput('');
     setSearchQuery('');
     setSelectedCategory('all');
     setPriceRange(maxProductPrice);
@@ -109,8 +134,8 @@ export default function Shop() {
             <input
               type="text"
               placeholder="Rechercher un soin (Sérum, Crème, Masque)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full bg-white border border-[#e3dcd3] px-4 py-3 text-xs text-[#2b2626] placeholder-stone-400 focus:outline-none focus:border-[#2e2a2b] transition-colors"
             />
             <svg className="w-4 h-4 text-stone-400 absolute right-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +184,7 @@ export default function Shop() {
         <div className="md:col-span-4 flex justify-start md:justify-end">
           <button
             onClick={handleResetFilters}
-            className="text-xs text-stone-500 hover:text-[#2b2626] underline underline-offset-4 tracking-wide transition-colors"
+            className="text-xs text-stone-500 hover:text-[#2b2626] underline underline-offset-4 tracking-wide transition-colors cursor-pointer"
           >
             Réinitialiser les filtres
           </button>
@@ -171,7 +196,7 @@ export default function Shop() {
         <div className="flex flex-wrap md:flex-nowrap items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider ${
+            className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider cursor-pointer ${
               selectedCategory === 'all'
                 ? 'bg-[#2e2a2b] text-[#e6ddd3]'
                 : 'bg-white text-stone-600 hover:bg-[#f1ede7] border border-[#e3dcd3]'
@@ -185,7 +210,7 @@ export default function Shop() {
               <button
                 key={catId}
                 onClick={() => setSelectedCategory(catId)}
-                className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider ${
+                className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider cursor-pointer ${
                   selectedCategory === catId
                     ? 'bg-[#2e2a2b] text-[#e6ddd3]'
                     : 'bg-white text-stone-600 hover:bg-[#f1ede7] border border-[#e3dcd3]'
@@ -221,8 +246,8 @@ export default function Shop() {
             <input
               type="text"
               placeholder="Rechercher..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full bg-white border border-[#e3dcd3] px-4 py-2.5 text-xs text-[#2b2626] focus:outline-none focus:border-[#2e2a2b]"
             />
             <svg className="w-4 h-4 text-stone-400 absolute right-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -232,7 +257,7 @@ export default function Shop() {
 
           <button
             onClick={() => setIsMobileFilterOpen(true)}
-            className="bg-[#2e2a2b] text-[#e6ddd3] text-xs px-4 py-2.5 flex items-center gap-2 font-medium uppercase tracking-wider shrink-0"
+            className="bg-[#2e2a2b] text-[#e6ddd3] text-xs px-4 py-2.5 flex items-center gap-2 font-medium uppercase tracking-wider shrink-0 cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -270,7 +295,7 @@ export default function Shop() {
                     <h3 className="font-serif text-lg font-normal uppercase text-[#2e2a2b]">Filtres de recherche</h3>
                     <button
                       onClick={() => setIsMobileFilterOpen(false)}
-                      className="p-2 text-stone-500 hover:text-[#2e2a2b]"
+                      className="p-2 text-stone-500 hover:text-[#2e2a2b] cursor-pointer"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -284,7 +309,7 @@ export default function Shop() {
                 <div className="pt-6 mt-6 border-t border-[#e3dcd3] flex gap-3">
                   <button
                     onClick={() => setIsMobileFilterOpen(false)}
-                    className="w-full bg-[#e9a3a0] text-white py-3 text-xs font-semibold uppercase tracking-[0.08em]"
+                    className="w-full bg-[#e9a3a0] text-white py-3 text-xs font-semibold uppercase tracking-[0.08em] cursor-pointer"
                   >
                     Voir les ({filteredProducts.length}) résultats
                   </button>
@@ -309,25 +334,21 @@ export default function Shop() {
             <p className="text-stone-600 font-light text-xs mb-6">Aucun soin ne correspond à ces critères de recherche.</p>
             <button
               onClick={handleResetFilters}
-              className="bg-[#e9a3a0] text-white px-6 py-3 text-xs uppercase tracking-[0.08em] font-semibold hover:brightness-105 transition-all inline-flex items-center gap-2"
+              className="bg-[#e9a3a0] text-white px-6 py-3 text-xs uppercase tracking-[0.08em] font-semibold hover:brightness-105 transition-all inline-flex items-center gap-2 cursor-pointer"
             >
               Effacer les filtres
             </button>
           </div>
         ) : (
-          <motion.div 
-            layout
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8"
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             <AnimatePresence>
               {filteredProducts.map((product) => (
                 <motion.div
-                  layout
+                  key={product.id}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3 }}
-                  key={product.id}
+                  transition={{ duration: 0.2 }}
                   className="bg-white border border-[#e3dcd3] overflow-hidden flex flex-col justify-between group hover:shadow-md transition-all duration-300"
                 >
                   <div className="relative">
@@ -378,7 +399,7 @@ export default function Shop() {
 
                       <button
                         onClick={() => addToCart(product, 1)}
-                        className="bg-[#e9a3a0] text-white p-2.5 md:p-3 hover:brightness-105 transition-all group-hover:scale-105 flex items-center justify-center"
+                        className="bg-[#e9a3a0] text-white p-2.5 md:p-3 hover:brightness-105 transition-all group-hover:scale-105 flex items-center justify-center cursor-pointer"
                         title="Ajouter au panier"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -390,7 +411,7 @@ export default function Shop() {
                 </motion.div>
               ))}
             </AnimatePresence>
-          </motion.div>
+          </div>
         )}
 
       </div>
