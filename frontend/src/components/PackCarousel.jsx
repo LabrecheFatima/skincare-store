@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../config';
@@ -20,6 +20,7 @@ const Leaf = () => (
 export default function PacksCarousel() {
   const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const scrollRef = useRef(null);
 
   const serverBaseUrl = API_URL.replace(/\/api\/?$/, '');
 
@@ -39,6 +40,16 @@ export default function PacksCarousel() {
     fetchPacks();
   }, []);
 
+  const scroll = (direction) => {
+    if (scrollRef.current) {
+      const scrollAmount = 340; // Distance de défilement par clic
+      scrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   const getImageUrl = (imageUrl) => {
     if (!imageUrl) return '/placeholder.png';
     if (imageUrl.startsWith('http')) return imageUrl;
@@ -48,6 +59,7 @@ export default function PacksCarousel() {
 
   if (loading || packs.length === 0) return null;
 
+  // Dédoublement des packs pour assurer la boucle infinie de l'animation CSS
   const track = [...packs, ...packs];
 
   return (
@@ -55,12 +67,39 @@ export default function PacksCarousel() {
       <style>{css}</style>
       <Leaf />
 
-      <header className="pc-head">
-        <h2>Nos packs exclusifs</h2>
-        <p>Nos combinaisons de soins à prix réduits</p>
+      <header className="pc-head flex justify-between items-end gap-4">
+        <div>
+          <h2>Nos packs exclusifs</h2>
+          <p>Nos combinaisons de soins à prix réduits</p>
+        </div>
+
+        {/* Boutons de contrôle manuels */}
+        <div className="flex items-center gap-2 shrink-0 z-10 mb-1">
+          <button
+            type="button"
+            onClick={() => scroll('left')}
+            className="w-10 h-10 sm:w-11 sm:h-11 bg-[#373233] border border-stone-600 rounded-none flex items-center justify-center hover:bg-stone-700 transition-all cursor-pointer active:scale-95 text-stone-200"
+            aria-label="Précédent"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => scroll('right')}
+            className="w-10 h-10 sm:w-11 sm:h-11 bg-[#373233] border border-stone-600 rounded-none flex items-center justify-center hover:bg-stone-700 transition-all cursor-pointer active:scale-95 text-stone-200"
+            aria-label="Suivant"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
       </header>
 
-      <div className="pc-viewport">
+      {/* Conteneur combinant défilement manuel et animation CSS */}
+      <div ref={scrollRef} className="pc-viewport overflow-x-auto scrollbar-none">
         <ul className="pc-track">
           {track.map((pack, i) => {
             const hasPromo = pack.promo_price && Number(pack.promo_price) > 0 && Number(pack.promo_price) < Number(pack.original_price);
@@ -73,7 +112,7 @@ export default function PacksCarousel() {
                   <div className="pc-img">
                     <img src={getImageUrl(mainImage)} alt={isClone ? "" : pack.name} loading="lazy" />
                     
-                    {/* Superposition du texte et des prix sur l'image */}
+                    {/* Overlay texte et prix */}
                     <div className="pc-overlay flex flex-col items-center text-center">
                       <h3 className="pc-title-on-img">{pack.name}</h3>
                       <div className="pc-prices-on-img">
@@ -111,13 +150,35 @@ const css = `
 .pc-head{position:relative;padding:0 clamp(16px,5vw,64px);margin-bottom:clamp(22px,4vw,40px);max-width:1200px;margin-inline:auto}
 .pc-head h2{margin:0 0 8px;font:400 clamp(28px,4.2vw,52px)/1.1 'Cormorant Garamond','Playfair Display',Georgia,serif;text-transform:uppercase;letter-spacing:.04em;color:#e9e1d8}
 .pc-head p{margin:0;font-size:clamp(12px,1.3vw,15px);color:#d8cfc6}
-.pc-viewport{position:relative;overflow:hidden;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
-.pc-track{list-style:none;margin:0;padding:0;display:flex;width:max-content;animation:pc-scroll 32s linear infinite}
-.pc-viewport:hover .pc-track,.pc-viewport:focus-within .pc-track{animation-play-state:paused}
 
-/* Fenêtres larges et allongées */
+/* Permet à la fois le scroll manuel et l'animation */
+.pc-viewport{
+  position:relative;
+  overflow-x:auto;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+}
+.pc-viewport::-webkit-scrollbar { display: none; }
+
+/* Animation infinie en CSS */
+.pc-track{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  width:max-content;
+  animation:pc-scroll 32s linear infinite;
+}
+
+/* Pause de l'animation lors du survol ou du touch */
+.pc-viewport:hover .pc-track,
+.pc-viewport:focus-within .pc-track,
+.pc-viewport:active .pc-track {
+  animation-play-state:paused;
+}
+
 .pc-item{flex:none;width:clamp(280px,32vw,380px);margin-right:clamp(16px,2.5vw,30px)}
 .pc-card{display:block;text-decoration:none;color:inherit;background:var(--panel);height:100%}
 .pc-card:focus-visible{outline:2px solid var(--pink);outline-offset:3px}
@@ -137,7 +198,7 @@ const css = `
   padding-top:28px;
   padding-left:16px;
   padding-right:16px;
-  background:linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0) 100%);
+  background:linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0) 100%);
   text-align:center;
 }
 
@@ -176,12 +237,13 @@ const css = `
 .pc-card:hover .pc-btn{filter:brightness(1.07)}
 
 @keyframes pc-scroll{to{transform:translateX(-50%)}}
+
 @media (max-width:560px){
   .pc-item{width:clamp(240px,75vw,290px)}
   .pc-track{animation-duration:26s}
 }
+
 @media (prefers-reduced-motion:reduce){
-  .pc-viewport{overflow-x:auto;-webkit-mask-image:none;mask-image:none}
   .pc-track{animation:none}
   .pc-img img,.pc-btn{transition:none}
 }

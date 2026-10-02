@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, Filter, RefreshCw, ChevronDown, ChevronUp, 
-  Trash2, Edit, Check, X, Phone, MapPin, User, ArrowUpDown, Clock
+  Trash2, Edit, Check, X, Phone, MapPin, User, ArrowUpDown, Clock,
+  AlertTriangle
 } from 'lucide-react';
 
 const AdminOrders = () => {
@@ -12,6 +13,13 @@ const AdminOrders = () => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
+
+  // État pour la modal de confirmation de suppression
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    orderId: null,
+    customerName: ''
+  });
 
   // Récupération des headers d'authentification
   const getAuthHeaders = () => {
@@ -56,7 +64,6 @@ const AdminOrders = () => {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      // Corrected: PUT method according to admin.routes.js
       const response = await fetch(`/api/admin/orders/${id}/status`, {
         method: 'PUT',
         headers: getAuthHeaders(),
@@ -70,18 +77,32 @@ const AdminOrders = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette commande ?")) return;
+  // Ouvre la modal de suppression
+  const openDeleteModal = (order) => {
+    const fullName = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.trim();
+    setDeleteModal({
+      isOpen: true,
+      orderId: order.id,
+      customerName: fullName ? `${fullName} (#${order.id})` : `#${order.id}`
+    });
+  };
+
+  // Exécute la suppression définitive
+  const confirmDelete = async () => {
+    if (!deleteModal.orderId) return;
+
     try {
-      const response = await fetch(`/api/admin/orders/${id}`, { 
+      const response = await fetch(`/api/admin/orders/${deleteModal.orderId}`, { 
         method: 'DELETE',
         headers: getAuthHeaders()
       });
       if (response.ok) {
-        setOrders(orders.filter(o => o.id !== id));
+        setOrders(orders.filter(o => o.id !== deleteModal.orderId));
       }
     } catch (err) {
       console.error("Erreur suppression:", err);
+    } finally {
+      setDeleteModal({ isOpen: false, orderId: null, customerName: '' });
     }
   };
 
@@ -100,7 +121,6 @@ const AdminOrders = () => {
 
   const handleSaveEdit = async (id) => {
     try {
-      // Corrected: PUT method according to admin.routes.js
       const response = await fetch(`/api/admin/orders/${id}/details`, {
         method: 'PUT',
         headers: getAuthHeaders(),
@@ -123,7 +143,6 @@ const AdminOrders = () => {
     setSortConfig({ key, direction });
   };
 
-  // Filtering and Sorting
   const filteredOrders = orders
     .filter(order => {
       const fullName = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.toLowerCase();
@@ -175,7 +194,7 @@ const AdminOrders = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 relative">
       {/* En-tête */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -189,7 +208,7 @@ const AdminOrders = () => {
         </div>
         <button
           onClick={fetchOrders}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 text-white text-sm font-medium rounded-lg hover:bg-stone-800 transition-colors shadow-sm self-start md:self-auto"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 text-white text-sm font-medium rounded-lg hover:bg-stone-800 transition-colors shadow-sm self-start md:self-auto cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Actualiser
@@ -214,7 +233,7 @@ const AdminOrders = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full md:w-auto px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 bg-white"
+            className="w-full md:w-auto px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 bg-white cursor-pointer"
           >
             <option value="ALL">Tous les statuts</option>
             <option value="en_attente">En attente</option>
@@ -404,14 +423,14 @@ const AdminOrders = () => {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleSaveEdit(order.id)}
-                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                               title="Enregistrer"
                             >
                               <Check className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setEditingId(null)}
-                              className="p-1.5 text-stone-400 hover:bg-stone-100 rounded-lg transition-colors"
+                              className="p-1.5 text-stone-400 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
                               title="Annuler"
                             >
                               <X className="w-4 h-4" />
@@ -421,14 +440,14 @@ const AdminOrders = () => {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleStartEdit(order)}
-                              className="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors"
+                              className="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors cursor-pointer"
                               title="Éditer"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDelete(order.id)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-lg transition-colors"
+                              onClick={() => openDeleteModal(order)}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-lg transition-colors cursor-pointer"
                               title="Supprimer"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -444,6 +463,50 @@ const AdminOrders = () => {
           </div>
         )}
       </div>
+
+      {/* MODAL DE CONFIRMATION DE SUPPRESSION (Style de l'image 2) */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 text-center shadow-xl border border-stone-100 flex flex-col items-center">
+            
+            {/* Icône d'avertissement arrondie */}
+            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-500" />
+            </div>
+
+            {/* Titre */}
+            <h3 className="font-serif text-xl font-semibold text-stone-900 mb-2">
+              Supprimer cette commande ?
+            </h3>
+
+            {/* Description */}
+            <p className="text-sm text-stone-500 leading-relaxed mb-6 max-w-xs">
+              Êtes-vous sûr de vouloir supprimer définitivement la commande{' '}
+              <span className="font-semibold text-stone-800">"{deleteModal.customerName}"</span> ?{' '}
+              Cette action est irréversible.
+            </p>
+
+            {/* Boutons d'action */}
+            <div className="flex items-center justify-center gap-3 w-full">
+              <button
+                type="button"
+                onClick={() => setDeleteModal({ isOpen: false, orderId: null, customerName: '' })}
+                className="px-5 py-2.5 text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-5 py-2.5 text-sm font-medium text-white bg-[#e11d48] hover:bg-[#be123c] rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                Supprimer
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

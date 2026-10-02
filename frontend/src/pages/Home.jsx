@@ -34,71 +34,34 @@ const icons = {
   candle: <path d="M24 8c4 6 6 9 6 13a6 6 0 0 1-12 0c0-4 2-7 6-13zM24 30v10M18 40h12" />,
 };
 
-// Textes multilingues
+// Contenu 100% Français
 const heroContent = {
-  fr: {
-    title: "Handcrafted with care",
-    description: "Savons artisanaux, naturellement parfumés, emballés à la main dans des tons chauds et naturels.",
-    cta: "Découvrir",
-    addToCart: "AJOUTER AU PANIER",
-    dir: 'ltr',
-    categories: [
-      { icon: "lotus", label: "Soins & Beauté" },
-      { icon: "lamp", label: "Senteur & Bien-etre" },
-      { icon: "sprout", label: "Maison & Déco" },
-      { icon: "linen", label: "Art de la Table" },
-      { icon: "candle", label: "Produit de beauté" },
-    ],
-  },
-  en: {
-    title: "Handcrafted with care",
-    description: "Artisanal soaps, naturally scented, wrapped by hand in warm and earthy tones.",
-    cta: "Discover",
-    addToCart: "ADD TO CART",
-    dir: 'ltr',
-    categories: [
-      { icon: "lotus", label: "Care & Beauty" },
-      { icon: "lamp", label: "Scent & Wellness" },
-      { icon: "sprout", label: "Home & Decor" },
-      { icon: "linen", label: "Tableware" },
-      { icon: "candle", label: "Beauty Products" },
-    ],
-  },
-  ar: {
-    title: "صُنع يدويًا بعناية",
-    description: "صابون حرفي بعطور طبيعية، يُغلَّف يدويًا بألوان دافئة وترابية.",
-    cta: "اكتشف",
-    addToCart: "أضف إلى السلة",
-    dir: 'rtl',
-    categories: [
-      { icon: "lotus", label: "العناية والجمال" },
-      { icon: "lamp", label: "العطور والرفاهية" },
-      { icon: "sprout", label: "المنزل والديكور" },
-      { icon: "linen", label: "فن المائدة" },
-      { icon: "candle", label: "منتجات التجميل" },
-    ],
-  },
-};
-
-const detectLang = () => {
-  if (typeof navigator === 'undefined') return 'fr';
-  const prefs = navigator.languages?.length ? navigator.languages : [navigator.language];
-  for (const l of prefs) {
-    const code = (l || '').slice(0, 2).toLowerCase();
-    if (heroContent[code]) return code;
-  }
-  return 'fr';
+  title: "Fait main avec soin",
+  description: "Savons artisanaux, naturellement parfumés, emballés à la main dans des tons chauds et naturels.",
+  cta: "Découvrir",
+  addToCart: "AJOUTER AU PANIER",
+  categories: [
+    { icon: "lotus", label: "Soins & Beauté" },
+    { icon: "lamp", label: "Senteur & Bien-être" },
+    { icon: "sprout", label: "Maison & Déco" },
+    { icon: "linen", label: "Art de la Table" },
+    { icon: "candle", label: "Produits de beauté" },
+  ],
 };
 
 export default function Home() {
   const scrollRef = useRef(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lang] = useState(detectLang);
-  const hero = heroContent[lang];
+  const hero = heroContent;
 
   const { addToCart } = useCart();
   const serverBaseUrl = API_URL.replace(/\/api\/?$/, '');
+
+  // Remonter automatiquement tout en haut lors de l'accès à la page Accueil
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -140,7 +103,7 @@ export default function Home() {
   };
 
   return (
-    <section className="hb" dir={hero.dir}>
+    <section className="hb" dir="ltr">
       <style>{css}</style>
 
       {/* BANNIÈRE HERO */}
@@ -193,29 +156,31 @@ export default function Home() {
       <section id="shop" className="py-12 md:py-20 px-4 sm:px-8 md:px-12 bg-[#f6f3ee] text-stone-900 relative mt-6">
         <div className="max-w-7xl mx-auto">
           
-          <div className="flex justify-between items-center mb-8 md:mb-12">
+          <div className="flex justify-between items-center mb-8 md:mb-12 gap-4">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif tracking-tight text-stone-900">
               Nos Meilleures Ventes
             </h2>
 
-            {/* BOUTONS DE DÉFILEMENT DU CARROUSEL */}
-            <div className="flex gap-2">
+            {/* BOUTONS DE DÉFILEMENT */}
+            <div className="flex items-center gap-2 shrink-0 z-10">
               <button
+                type="button"
                 onClick={() => scroll('left')}
-                className="w-10 h-10 border border-stone-300 flex items-center justify-center hover:border-stone-900 transition-colors cursor-pointer"
+                className="w-10 h-10 sm:w-11 sm:h-11 bg-white border border-stone-300 rounded-none flex items-center justify-center hover:bg-stone-50 hover:border-stone-400 transition-all shadow-xs cursor-pointer active:scale-95"
                 aria-label="Précédent"
               >
-                <svg className="w-4 h-4 text-stone-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 19l-7-7 7-7" />
+                <svg className="w-5 h-5 text-stone-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
               <button
+                type="button"
                 onClick={() => scroll('right')}
-                className="w-10 h-10 bg-stone-900 text-white flex items-center justify-center hover:bg-stone-800 transition-opacity cursor-pointer"
+                className="w-10 h-10 sm:w-11 sm:h-11 bg-white border border-stone-300 rounded-none flex items-center justify-center hover:bg-stone-50 hover:border-stone-400 transition-all shadow-xs cursor-pointer active:scale-95"
                 aria-label="Suivant"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5l7 7-7 7" />
+                <svg className="w-5 h-5 text-stone-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                 </svg>
               </button>
             </div>
@@ -242,7 +207,7 @@ export default function Home() {
                       to={`/product/${productSlug}`}
                       className="group flex flex-col items-center text-center h-full"
                     >
-                      {/* CONTENEUR DE L'IMAGE - AJUSTÉ POUR DES IMAGES LUMINEUSES ET SANS DÉCALAGE */}
+                      {/* CONTENEUR DE L'IMAGE */}
                       <div className="relative w-full aspect-square bg-[#ded3c5] flex items-center justify-center overflow-hidden">
                         <img
                           src={getImageUrl(product.image_url)}
@@ -256,7 +221,7 @@ export default function Home() {
                         {product.name}
                       </h3>
 
-                      {/* PRIX (Conserve la logique promo backend) */}
+                      {/* PRIX */}
                       <div className="mt-1 font-sans text-xs sm:text-sm text-stone-400 font-semibold">
                         {product.has_promo ? (
                           <span className="inline-flex items-baseline gap-2">
@@ -287,7 +252,6 @@ export default function Home() {
       {/* AUTRES COMPOSANTS */}
       <PacksCarousel />
   
-      
     </section>
   );
 }

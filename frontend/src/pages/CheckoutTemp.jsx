@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
+import { Trash2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_URL } from '../config';
 
 export default function Checkout() {
-  const { cart, totalAmount, clearCart } = useCart();
+  const { cart, clearCart, removeFromCart } = useCart();
   const navigate = useNavigate();
 
-  // Configuration dynamique de la livraison reçue de l'admin
+  // Configuration dynamique de la livraison reçue du backend
   const [shippingEnabled, setShippingEnabled] = useState(false);
   const [shippingRates, setShippingRates] = useState([]);
   const [selectedShippingCost, setSelectedShippingCost] = useState(0);
@@ -67,7 +68,8 @@ export default function Checkout() {
     return `${cleanBaseUrl}/uploads/${fileName}`;
   };
 
-  const subtotal = totalAmount || cart.reduce((sum, item) => {
+  // Calcul dynamique du sous-total basé uniquement sur le contenu actuel du panier
+  const subtotal = cart.reduce((sum, item) => {
     const p = Number(item.has_promo ? item.final_price : (item.promo_price ?? item.price ?? item.original_price ?? 0));
     const q = item.qty || item.quantity || 1;
     return sum + (p * q);
@@ -75,8 +77,14 @@ export default function Checkout() {
 
   const grandTotal = subtotal + (shippingEnabled ? selectedShippingCost : 0);
 
+  // Soumission de la commande
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
+
+    if (cart.length === 0) {
+      alert("Votre panier est vide.");
+      return;
+    }
 
     if (shippingEnabled && !formData.wilaya) {
       alert("Veuillez sélectionner une wilaya de livraison.");
@@ -100,6 +108,7 @@ export default function Checkout() {
         notes: formData.notes,
         shipping_fee: shippingEnabled ? selectedShippingCost : 0,
         total_price: grandTotal,
+        // Envoie uniquement les articles présents dans l'état React à l'instant T
         items: cart.map(item => ({
           id: item.id || item.product_id,
           qty: item.qty || item.quantity || 1,
@@ -188,7 +197,7 @@ export default function Checkout() {
                   />
                 </div>
 
-                {/* MENU DÉROULANT DES WILAYAS (AFFICHE UNIQUEMENT SI TOGGLE LILVRAISON = ACTIF) */}
+                {/* MENU DÉROULANT DES WILAYAS */}
                 {shippingEnabled && (
                   <div>
                     <label className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1.5 font-medium">Wilaya de Livraison *</label>
@@ -249,9 +258,10 @@ export default function Checkout() {
               {cart.map((item, index) => {
                 const itemPrice = Number(item.has_promo ? item.final_price : (item.promo_price ?? item.price ?? item.original_price ?? 0));
                 const itemQty = item.qty || item.quantity || 1;
-                
+                const itemId = item.id || item.product_id;
+
                 return (
-                  <div key={item.id || index} className="flex items-center gap-4 pb-4 border-b border-stone-100">
+                  <div key={itemId || index} className="flex items-center gap-4 pb-4 border-b border-stone-100 relative group">
                     <div className="w-16 h-16 bg-[#FBF9F5] rounded-xl border border-stone-200/60 p-1 flex items-center justify-center shrink-0 overflow-hidden">
                       <img 
                         src={getImageUrl(item)} 
@@ -263,11 +273,25 @@ export default function Checkout() {
                         }}
                       />
                     </div>
-                    <div className="flex-1 min-w-0">
+
+                    <div className="flex-1 min-w-0 pr-2">
                       <h4 className="font-serif text-sm truncate text-stone-900">{item.name}</h4>
                       <p className="text-xs text-stone-400">Qté : {itemQty}</p>
                     </div>
-                    <span className="text-xs font-medium text-stone-900">{(itemPrice * itemQty).toLocaleString()} DA</span>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-xs font-medium text-stone-900">{(itemPrice * itemQty).toLocaleString()} DA</span>
+                      
+                      {/* BTON DE SUPPRESSION AVEC TRANSMISSION RÉCURSIVE DE L'ID */}
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(itemId)}
+                        className="p-1 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Supprimer cet article"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}

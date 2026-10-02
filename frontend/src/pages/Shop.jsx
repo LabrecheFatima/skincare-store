@@ -33,6 +33,11 @@ export default function Shop() {
   const [maxProductPrice, setMaxProductPrice] = useState(20000);
   const [sortBy, setSortBy] = useState('default');
 
+  // Remonter tout en haut de la page au chargement du composant
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // Déduction de la base d'URL du serveur pour servir les images (/uploads)
   const serverBaseUrl = API_URL.replace(/\/api\/?$/, '');
 

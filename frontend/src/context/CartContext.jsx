@@ -30,7 +30,13 @@ export function CartProvider({ children }) {
     });
   };
 
-  const removeFromCart = (id) => setCart(prev => (Array.isArray(prev) ? prev.filter(i => i.id !== id) : []));
+  const removeFromCart = (id) => {
+  setCart(prev => {
+    const currentCart = Array.isArray(prev) ? prev : [];
+    return currentCart.filter(item => String(item.id) !== String(id) && String(item.product_id) !== String(id));
+  });
+};  
+
   const clearCart = () => setCart([]);
 
   const safeCart = Array.isArray(cart) ? cart : [];
