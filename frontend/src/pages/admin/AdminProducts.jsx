@@ -279,6 +279,11 @@ export default function AdminProducts() {
     }
   };
 
+  // Condition d'erreur sur le prix promotionnel
+  const isPromoInvalid = formData.promo_price !== '' && 
+    formData.original_price !== '' && 
+    Number(formData.promo_price) > Number(formData.original_price);
+
   return (
     <div className="space-y-6 relative">
       
@@ -716,29 +721,49 @@ export default function AdminProducts() {
               </div>
 
               {/* Prix de base & Prix Promo */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Prix de base (DA) *</label>
-                  <input
-                    type="number"
-                    value={formData.original_price}
-                    onChange={(e) => setFormData({ ...formData, original_price: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                    min="0"
-                    required
-                  />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Prix de base (DA) *</label>
+                    <input
+                      type="number"
+                      value={formData.original_price}
+                      onChange={(e) => setFormData({ ...formData, original_price: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none transition-colors ${
+                        isPromoInvalid 
+                          ? 'border-rose-300 bg-rose-50/30 text-rose-900 focus:border-rose-500' 
+                          : 'border-stone-200 focus:border-stone-900'
+                      }`}
+                      min="0"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Prix Promotionnel (DA)</label>
+                    <input
+                      type="number"
+                      value={formData.promo_price}
+                      onChange={(e) => setFormData({ ...formData, promo_price: e.target.value })}
+                      placeholder="Facultatif"
+                      className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none transition-colors ${
+                        isPromoInvalid 
+                          ? 'border-rose-300 bg-rose-50/30 text-rose-900 focus:border-rose-500' 
+                          : 'border-stone-200 focus:border-stone-900'
+                      }`}
+                      min="0"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Prix Promotionnel (DA)</label>
-                  <input
-                    type="number"
-                    value={formData.promo_price}
-                    onChange={(e) => setFormData({ ...formData, promo_price: e.target.value })}
-                    placeholder="Facultatif"
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                    min="0"
-                  />
-                </div>
+
+                {/* 🔴 Panneau d'alerte identique à la page Pack */}
+                {isPromoInvalid && (
+                  <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 flex items-center gap-3 text-xs animate-in fade-in duration-200">
+                    <AlertCircle size={18} className="shrink-0" />
+                    <span>
+                      Le prix promotionnel (<strong>{formData.promo_price} DA</strong>) ne peut pas être supérieur au prix de base (<strong>{formData.original_price} DA</strong>).
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Description */}

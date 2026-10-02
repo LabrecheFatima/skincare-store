@@ -1,8 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../config';
+
+const fmt = (n) => `${Number(n).toLocaleString("fr-FR")} DA`;
+
+const Leaf = () => (
+  <svg viewBox="0 0 60 200" className="pc-orn" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
+    <path d="M30 200V20" />
+    {[40, 75, 110, 145].map((y) => (
+      <g key={y}>
+        <path d={`M30 ${y + 25}C10 ${y + 20} 8 ${y} 12 ${y - 8}C26 ${y - 4} 32 ${y + 10} 30 ${y + 25}Z`} />
+        <path d={`M30 ${y + 10}C50 ${y + 5} 52 ${y - 15} 48 ${y - 23}C34 ${y - 19} 28 ${y - 5} 30 ${y + 10}Z`} />
+      </g>
+    ))}
+  </svg>
+);
 
 export default function PacksCarousel() {
   const [packs, setPacks] = useState([]);
@@ -35,111 +48,141 @@ export default function PacksCarousel() {
 
   if (loading || packs.length === 0) return null;
 
-  const infinitePacks = [...packs, ...packs];
+  const track = [...packs, ...packs];
 
   return (
-    <section className="relative bg-[#F6EAE7] pt-20 pb-20 overflow-hidden">
-      {/* Vague ondulée du HAUT */}
-      <div className="absolute top-0 left-0 right-0 w-full overflow-hidden leading-none pointer-events-none z-20">
-        <svg
-          className="relative block w-full h-8 sm:h-12 md:h-16 text-apoteca-cream"
-          viewBox="0 0 1200 120"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,0 C150,90 350,-40 500,40 C650,120 900,10 1200,40 L1200,0 L0,0 Z"
-            fill="currentColor"
-          />
-        </svg>
-      </div>
+    <section className="pc">
+      <style>{css}</style>
+      <Leaf />
 
-      <div className="max-w-7xl mx-auto px-6 md:px-16 pt-6 mb-8 relative z-10">
-        <div>
-          <h2 className="text-3xl md:text-5xl font-serif tracking-tight text-apoteca-charcoal">
-            Nos Packs Exclusifs
-          </h2>
-          <p className="text-stone-600 text-sm mt-1 font-medium">
-            Profitez de nos combinaisons de soins à prix réduits
-          </p>
-        </div>
-      </div>
+      <header className="pc-head">
+        <h2>Nos packs exclusifs</h2>
+        <p>Nos combinaisons de soins à prix réduits</p>
+      </header>
 
-      {/* Conteneur du défilement fluide infini */}
-      <div className="w-full overflow-hidden py-4 flex relative z-10">
-        <motion.div
-          className="flex gap-6 shrink-0"
-          animate={{ x: ['0%', '-50%'] }}
-          transition={{
-            repeat: Infinity,
-            ease: 'linear',
-            duration: Math.max(15, packs.length * 5),
-          }}
-          whileHover={{ animationPlayState: 'paused' }}
-        >
-          {infinitePacks.map((pack, index) => {
-            const hasPromo = pack.promo_price && Number(pack.promo_price) > 0;
+      <div className="pc-viewport">
+        <ul className="pc-track">
+          {track.map((pack, i) => {
+            const hasPromo = pack.promo_price && Number(pack.promo_price) > 0 && Number(pack.promo_price) < Number(pack.original_price);
+            const isClone = i >= packs.length;
             const mainImage = pack.image_url || (pack.images && pack.images[0]);
 
             return (
-              <Link
-                    key={`${pack.id}-${index}`}
-                    to={`/pack/${pack.slug || pack.id}`}
-                    className="w-[280px] sm:w-[320px] md:w-[350px] h-[460px] sm:h-[500px] relative rounded-3xl overflow-hidden shadow-xl border border-white/50 flex-shrink-0 cursor-pointer group block"
-                    >
-                {/* Image de fond du Pack */}
-                <div className="absolute inset-0 w-full h-full bg-stone-200">
-                  <img
-                    src={getImageUrl(mainImage)}
-                    alt={pack.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/40" />
-                </div>
-
-                {/* Contenu du Pack */}
-                <div className="relative z-10 p-6 text-center flex flex-col items-center justify-between h-full">
-                  <div>
-                    <h3 className="text-2xl sm:text-3xl font-serif font-medium tracking-wide text-white drop-shadow-md mb-2">
-                      {pack.name}
-                    </h3>
-
-                    <div className="flex flex-col items-center mt-1">
-                      {hasPromo ? (
-                        <>
-                          <span className="text-xs sm:text-sm font-light text-white/80 line-through tracking-wider">
-                            {pack.original_price} DA
-                          </span>
-                          <span className="text-2xl sm:text-3xl font-serif font-semibold text-white tracking-tight drop-shadow-md">
-                            {pack.promo_price} DA
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-2xl sm:text-3xl font-serif font-semibold text-white tracking-tight drop-shadow-md">
-                          {pack.original_price} DA
-                        </span>
-                      )}
+              <li key={`${pack.id || pack._id}-${i}`} className="pc-item" aria-hidden={isClone || undefined}>
+                <Link to={`/pack/${pack.slug || pack.id || pack._id}`} className="pc-card" tabIndex={isClone ? -1 : undefined}>
+                  <div className="pc-img">
+                    <img src={getImageUrl(mainImage)} alt={isClone ? "" : pack.name} loading="lazy" />
+                    
+                    {/* Superposition du texte et des prix sur l'image */}
+                    <div className="pc-overlay flex flex-col items-center text-center">
+                      <h3 className="pc-title-on-img">{pack.name}</h3>
+                      <div className="pc-prices-on-img">
+                        {hasPromo ? (
+                          <>
+                            <s className="pc-old-price">{fmt(pack.original_price)}</s>
+                            <strong className="pc-promo-price">{fmt(pack.promo_price)}</strong>
+                          </>
+                        ) : (
+                          <strong className="pc-promo-price">{fmt(pack.original_price)}</strong>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
+
+                  <div className="pc-body">
+                    <span className="pc-btn">Voir le pack</span>
+                  </div>
+                </Link>
+              </li>
             );
           })}
-        </motion.div>
-      </div>
-
-      {/* Vague ondulée du BAS */}
-      <div className="absolute bottom-0 left-0 right-0 w-full overflow-hidden leading-none pointer-events-none z-20">
-        <svg
-          className="relative block w-full h-8 sm:h-12 md:h-16 text-apoteca-cream rotate-180"
-          viewBox="0 0 1200 120"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,0 C150,90 350,-40 500,40 C650,120 900,10 1200,40 L1200,0 L0,0 Z"
-            fill="currentColor"
-          />
-        </svg>
+        </ul>
       </div>
     </section>
   );
 }
+
+const css = `
+.pc{--dark:#2e2a2b;--panel:#373233;--pink:#e9a3a0;--sand:#e6ddd3;
+  position:relative;background:var(--dark);color:var(--sand);overflow:hidden;
+  padding:clamp(36px,6vw,72px) 0 clamp(40px,6vw,72px);font-family:'Helvetica Neue',Arial,sans-serif}
+.pc *{box-sizing:border-box}
+.pc-orn{position:absolute;left:0;top:0;height:100%;width:auto;opacity:.08;color:#fff;pointer-events:none}
+.pc-head{position:relative;padding:0 clamp(16px,5vw,64px);margin-bottom:clamp(22px,4vw,40px);max-width:1200px;margin-inline:auto}
+.pc-head h2{margin:0 0 8px;font:400 clamp(28px,4.2vw,52px)/1.1 'Cormorant Garamond','Playfair Display',Georgia,serif;text-transform:uppercase;letter-spacing:.04em;color:#e9e1d8}
+.pc-head p{margin:0;font-size:clamp(12px,1.3vw,15px);color:#d8cfc6}
+.pc-viewport{position:relative;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.pc-track{list-style:none;margin:0;padding:0;display:flex;width:max-content;animation:pc-scroll 32s linear infinite}
+.pc-viewport:hover .pc-track,.pc-viewport:focus-within .pc-track{animation-play-state:paused}
+
+/* Fenêtres larges et allongées */
+.pc-item{flex:none;width:clamp(280px,32vw,380px);margin-right:clamp(16px,2.5vw,30px)}
+.pc-card{display:block;text-decoration:none;color:inherit;background:var(--panel);height:100%}
+.pc-card:focus-visible{outline:2px solid var(--pink);outline-offset:3px}
+
+.pc-img{position:relative;aspect-ratio:3/4;overflow:hidden;background:#4a4344}
+.pc-img img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s ease}
+.pc-card:hover .pc-img img{transform:scale(1.04)}
+
+/* Overlay texte/prix sur l'image */
+.pc-overlay{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  padding-top:28px;
+  padding-left:16px;
+  padding-right:16px;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0) 100%);
+  text-align:center;
+}
+
+.pc-title-on-img{
+  margin:0 0 10px;
+  font:400 clamp(20px,2.4vw,28px)/1.2 'Cormorant Garamond','Playfair Display',Georgia,serif;
+  color:#ffffff;
+  text-shadow:0 2px 6px rgba(0,0,0,0.6);
+}
+
+.pc-prices-on-img{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:2px;
+}
+
+.pc-old-price{
+  color:rgba(255,255,255,0.8);
+  font-size:14px;
+  text-decoration:line-through;
+  text-shadow:0 1px 4px rgba(0,0,0,0.7);
+  font-family:'Cormorant Garamond','Playfair Display',Georgia,serif;
+}
+
+.pc-promo-price{
+  color:#ffffff;
+  font-size:clamp(22px,2.8vw,32px);
+  font-weight:700;
+  text-shadow:0 2px 8px rgba(0,0,0,0.8);
+  font-family:'Cormorant Garamond','Playfair Display',Georgia,serif;
+}
+
+.pc-body{padding:16px;text-align:center}
+.pc-btn{display:inline-block;background:var(--pink);color:#fff;padding:10px 24px;font:600 11px 'Helvetica Neue',Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;transition:filter .2s}
+.pc-card:hover .pc-btn{filter:brightness(1.07)}
+
+@keyframes pc-scroll{to{transform:translateX(-50%)}}
+@media (max-width:560px){
+  .pc-item{width:clamp(240px,75vw,290px)}
+  .pc-track{animation-duration:26s}
+}
+@media (prefers-reduced-motion:reduce){
+  .pc-viewport{overflow-x:auto;-webkit-mask-image:none;mask-image:none}
+  .pc-track{animation:none}
+  .pc-img img,.pc-btn{transition:none}
+}
+`;

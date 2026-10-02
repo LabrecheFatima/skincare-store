@@ -5,6 +5,8 @@ import axios from 'axios';
 import { useCart } from '../context/CartContext';
 import { API_URL } from '../config';
 
+const fmt = (n) => `${Number(n || 0).toLocaleString('fr-FR')} DA`;
+
 export default function Shop() {
   const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
@@ -54,17 +56,17 @@ export default function Shop() {
   }, []);
 
   const getImageUrl = (imageUrl) => {
-  if (!imageUrl) return '/placeholder.png';
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
+    if (!imageUrl) return '/placeholder.png';
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
 
-  // On extrait uniquement le nom du fichier (ex: "1790449229445.webp")
-  const filename = imageUrl.split('/').pop();
+    // On extrait uniquement le nom du fichier (ex: "1790449229445.webp")
+    const filename = imageUrl.split('/').pop();
 
-  // On retire à la fois /api ET /uploads s'ils sont présents à la fin de API_URL
-  const cleanBaseUrl = API_URL.replace(/\/(api|uploads)\/?$/, '');
+    // On retire à la fois /api ET /uploads s'ils sont présents à la fin de API_URL
+    const cleanBaseUrl = API_URL.replace(/\/(api|uploads)\/?$/, '');
 
-  return `${cleanBaseUrl}/uploads/${filename}`;
-};
+    return `${cleanBaseUrl}/uploads/${filename}`;
+  };
 
   const filteredProducts = useMemo(() => {
     return products
@@ -102,27 +104,27 @@ export default function Shop() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
         <div className="md:col-span-8 relative">
-          <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1.5 font-medium">Recherche</span>
+          <span className="text-[10px] uppercase tracking-widest text-stone-500 block mb-1.5 font-medium">Recherche</span>
           <div className="relative">
             <input
               type="text"
               placeholder="Rechercher un soin (Sérum, Crème, Masque)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#FBF9F5] border border-stone-200 rounded-2xl pl-10 pr-4 py-3 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-stone-900 transition-colors"
+              className="w-full bg-white border border-[#e3dcd3] px-4 py-3 text-xs text-[#2b2626] placeholder-stone-400 focus:outline-none focus:border-[#2e2a2b] transition-colors"
             />
-            <svg className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-stone-400 absolute right-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
         </div>
 
         <div className="md:col-span-4">
-          <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1.5 font-medium">Trier par</span>
+          <span className="text-[10px] uppercase tracking-widest text-stone-500 block mb-1.5 font-medium">Trier par</span>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="w-full bg-[#FBF9F5] border border-stone-200 rounded-2xl px-4 py-3 text-xs text-stone-700 focus:outline-none focus:border-stone-900 cursor-pointer"
+            className="w-full bg-white border border-[#e3dcd3] px-4 py-3 text-xs text-[#2b2626] focus:outline-none focus:border-[#2e2a2b] cursor-pointer"
           >
             <option value="default">Sélection & Pertinence</option>
             <option value="price-asc">Prix : Croissant</option>
@@ -133,15 +135,15 @@ export default function Shop() {
         </div>
       </div>
 
-      <div className="border-t border-stone-100 my-2" />
+      <div className="border-t border-[#e3dcd3] my-2" />
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
         <div className="md:col-span-8">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-[10px] uppercase tracking-widest text-stone-400 font-medium">
-              Budget max : <strong className="text-stone-900 font-normal">{priceRange} DA</strong>
+            <span className="text-[10px] uppercase tracking-widest text-stone-500 font-medium">
+              Budget max : <strong className="text-[#2b2626] font-semibold">{fmt(priceRange)}</strong>
             </span>
-            <span className="text-[10px] text-stone-400">Plafond : {maxProductPrice} DA</span>
+            <span className="text-[10px] text-stone-400">Plafond : {fmt(maxProductPrice)}</span>
           </div>
           <input
             type="range"
@@ -150,14 +152,14 @@ export default function Shop() {
             step="200"
             value={priceRange}
             onChange={(e) => setPriceRange(Number(e.target.value))}
-            className="w-full accent-stone-900 cursor-pointer h-1.5 bg-stone-100 rounded-lg"
+            className="w-full accent-[#e9a3a0] cursor-pointer h-1.5 bg-[#e3dcd3]"
           />
         </div>
 
         <div className="md:col-span-4 flex justify-start md:justify-end">
           <button
             onClick={handleResetFilters}
-            className="text-xs text-stone-400 hover:text-stone-900 underline underline-offset-4 tracking-wide transition-colors"
+            className="text-xs text-stone-500 hover:text-[#2b2626] underline underline-offset-4 tracking-wide transition-colors"
           >
             Réinitialiser les filtres
           </button>
@@ -165,14 +167,14 @@ export default function Shop() {
       </div>
 
       <div>
-        <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-2.5 font-medium">Catégories</span>
+        <span className="text-[10px] uppercase tracking-widest text-stone-500 block mb-2.5 font-medium">Catégories</span>
         <div className="flex flex-wrap md:flex-nowrap items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-5 py-2.5 rounded-full text-xs transition-all whitespace-nowrap ${
+            className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider ${
               selectedCategory === 'all'
-                ? 'bg-stone-900 text-white shadow-sm'
-                : 'bg-[#FBF9F5] text-stone-600 hover:bg-stone-200/60 border border-stone-200/60'
+                ? 'bg-[#2e2a2b] text-[#e6ddd3]'
+                : 'bg-white text-stone-600 hover:bg-[#f1ede7] border border-[#e3dcd3]'
             }`}
           >
             Toutes ({products.length})
@@ -183,10 +185,10 @@ export default function Shop() {
               <button
                 key={catId}
                 onClick={() => setSelectedCategory(catId)}
-                className={`px-5 py-2.5 rounded-full text-xs transition-all whitespace-nowrap ${
+                className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider ${
                   selectedCategory === catId
-                    ? 'bg-stone-900 text-white shadow-sm'
-                    : 'bg-[#FBF9F5] text-stone-600 hover:bg-stone-200/60 border border-stone-200/60'
+                    ? 'bg-[#2e2a2b] text-[#e6ddd3]'
+                    : 'bg-white text-stone-600 hover:bg-[#f1ede7] border border-[#e3dcd3]'
                 }`}
               >
                 {cat.name}
@@ -199,20 +201,21 @@ export default function Shop() {
   );
 
   return (
-    <div className="w-full min-h-screen bg-[#FBF9F5] pt-24 md:pt-28 pb-24 font-sans text-stone-800">
+    <div className="w-full min-h-screen bg-[#f8f5f1] pt-24 md:pt-28 pb-24 font-sans text-[#2b2626]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12">
         <div className="text-center max-w-2xl mx-auto mb-8 md:mb-12">
           <span className="text-[10px] md:text-[11px] font-medium uppercase tracking-[0.2em] text-stone-400 block mb-2 md:mb-3">
             Exploration
           </span>
-          <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-stone-900 mb-3 md:mb-4 font-normal">
+          <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-[#2e2a2b] mb-3 md:mb-4 font-normal uppercase">
             Boutique & Soins
           </h1>
-          <p className="text-stone-500 font-light text-xs md:text-sm leading-relaxed max-w-lg mx-auto">
+          <p className="text-stone-600 font-light text-xs md:text-sm leading-relaxed max-w-lg mx-auto">
             Des formulations d'exception conçues pour révéler la beauté naturelle de votre peau.
           </p>
         </div>
 
+        {/* Barre de recherche et bouton de filtre mobile */}
         <div className="md:hidden mb-6 flex items-center gap-3">
           <div className="relative flex-1">
             <input
@@ -220,16 +223,16 @@ export default function Shop() {
               placeholder="Rechercher..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-stone-200 rounded-full pl-9 pr-4 py-2.5 text-xs text-stone-800 focus:outline-none focus:border-stone-900"
+              className="w-full bg-white border border-[#e3dcd3] px-4 py-2.5 text-xs text-[#2b2626] focus:outline-none focus:border-[#2e2a2b]"
             />
-            <svg className="w-4 h-4 text-stone-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-stone-400 absolute right-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
 
           <button
             onClick={() => setIsMobileFilterOpen(true)}
-            className="bg-stone-900 text-white text-xs px-4 py-2.5 rounded-full flex items-center gap-2 font-medium shrink-0 shadow-sm"
+            className="bg-[#2e2a2b] text-[#e6ddd3] text-xs px-4 py-2.5 flex items-center gap-2 font-medium uppercase tracking-wider shrink-0"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -238,10 +241,12 @@ export default function Shop() {
           </button>
         </div>
 
-        <div className="hidden md:block bg-white/80 backdrop-blur-md p-6 rounded-3xl border border-stone-200/60 shadow-xs mb-12">
+        {/* Bloc filtre bureau */}
+        <div className="hidden md:block bg-[#f1ede7] p-6 border border-[#e3dcd3] mb-12">
           <FilterContent />
         </div>
 
+        {/* Offcanvas Filtre Mobile */}
         <AnimatePresence>
           {isMobileFilterOpen && (
             <div className="fixed inset-0 z-50 md:hidden flex justify-end">
@@ -250,7 +255,7 @@ export default function Shop() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsMobileFilterOpen(false)}
-                className="absolute inset-0 bg-stone-900/40 backdrop-blur-xs"
+                className="absolute inset-0 bg-[#2e2a2b]/60 backdrop-blur-xs"
               />
 
               <motion.div
@@ -258,14 +263,14 @@ export default function Shop() {
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="relative w-full bg-white rounded-t-3xl mt-auto p-6 max-h-[85vh] overflow-y-auto shadow-2xl flex flex-col justify-between"
+                className="relative w-full bg-[#f8f5f1] mt-auto p-6 max-h-[85vh] overflow-y-auto shadow-2xl flex flex-col justify-between border-t border-[#e3dcd3]"
               >
                 <div>
-                  <div className="flex justify-between items-center mb-6 pb-3 border-b border-stone-100">
-                    <h3 className="font-serif text-lg font-normal text-stone-900">Filtres de recherche</h3>
+                  <div className="flex justify-between items-center mb-6 pb-3 border-b border-[#e3dcd3]">
+                    <h3 className="font-serif text-lg font-normal uppercase text-[#2e2a2b]">Filtres de recherche</h3>
                     <button
                       onClick={() => setIsMobileFilterOpen(false)}
-                      className="p-2 rounded-full hover:bg-stone-100 text-stone-500"
+                      className="p-2 text-stone-500 hover:text-[#2e2a2b]"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -276,10 +281,10 @@ export default function Shop() {
                   <FilterContent />
                 </div>
 
-                <div className="pt-6 mt-6 border-t border-stone-100 flex gap-3">
+                <div className="pt-6 mt-6 border-t border-[#e3dcd3] flex gap-3">
                   <button
                     onClick={() => setIsMobileFilterOpen(false)}
-                    className="w-full bg-stone-900 text-white py-3 rounded-full text-xs font-medium uppercase tracking-widest"
+                    className="w-full bg-[#e9a3a0] text-white py-3 text-xs font-semibold uppercase tracking-[0.08em]"
                   >
                     Voir les ({filteredProducts.length}) résultats
                   </button>
@@ -290,8 +295,8 @@ export default function Shop() {
         </AnimatePresence>
 
         <div className="mb-6 px-1 flex items-center justify-between">
-          <p className="text-xs text-stone-400 tracking-wide">
-            <span className="font-medium text-stone-800">{filteredProducts.length}</span> produit(s) disponible(s)
+          <p className="text-xs text-stone-500 tracking-wide">
+            <span className="font-semibold text-[#2b2626]">{filteredProducts.length}</span> soin(s) disponible(s)
           </p>
         </div>
 
@@ -300,11 +305,11 @@ export default function Shop() {
             Chargement de la collection...
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-3xl border border-stone-200/60 p-8">
-            <p className="text-stone-500 font-light text-sm mb-6">Aucun soin ne correspond à ces critères de recherche.</p>
+          <div className="text-center py-16 bg-[#f1ede7] border border-[#e3dcd3] p-8 max-w-md mx-auto">
+            <p className="text-stone-600 font-light text-xs mb-6">Aucun soin ne correspond à ces critères de recherche.</p>
             <button
               onClick={handleResetFilters}
-              className="bg-stone-900 text-white px-6 py-3 rounded-full text-xs uppercase tracking-widest hover:bg-stone-800 transition-all inline-flex items-center gap-2"
+              className="bg-[#e9a3a0] text-white px-6 py-3 text-xs uppercase tracking-[0.08em] font-semibold hover:brightness-105 transition-all inline-flex items-center gap-2"
             >
               Effacer les filtres
             </button>
@@ -323,61 +328,61 @@ export default function Shop() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.3 }}
                   key={product.id}
-                  className="bg-white rounded-3xl border border-stone-200/60 overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all duration-300 group"
+                  className="bg-white border border-[#e3dcd3] overflow-hidden flex flex-col justify-between group hover:shadow-md transition-all duration-300"
                 >
                   <div className="relative">
                     {product.has_promo ? (
-                      <span className="absolute top-4 left-4 z-10 bg-stone-900 text-white text-[9px] font-medium tracking-widest uppercase px-3 py-1 rounded-full">
+                      <span className="absolute top-4 left-4 z-10 bg-[#e9a3a0] text-[#2b2626] text-[9px] font-bold tracking-widest uppercase px-3 py-1">
                         Promo
                       </span>
                     ) : (
-                      <span className="absolute top-4 left-4 z-10 bg-stone-100/90 text-stone-700 text-[9px] font-medium tracking-widest uppercase px-3 py-1 rounded-full backdrop-blur-xs">
+                      <span className="absolute top-4 left-4 z-10 bg-[#2e2a2b]/80 text-[#e6ddd3] text-[9px] font-medium tracking-widest uppercase px-3 py-1">
                         Soin
                       </span>
                     )}
 
-                    <Link to={`/product/${product.slug || product.id}`} className="block h-64 md:h-72 p-6 md:p-8 bg-[#FDFBF7] flex items-center justify-center overflow-hidden">
+                    <Link to={`/product/${product.slug || product.id}`} className="block h-64 md:h-72 p-6 bg-white border-b border-[#e3dcd3] flex items-center justify-center overflow-hidden">
                       <img
                         src={getImageUrl(product.image_url)}
                         alt={product.name}
-                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out"
+                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out p-2"
                       />
                     </Link>
                   </div>
 
-                  <div className="p-5 md:p-6 flex flex-col justify-between flex-1 bg-white">
+                  <div className="p-5 md:p-6 flex flex-col justify-between flex-1 bg-[#f1ede7]/50">
                     <div className="mb-4">
-                      <h3 className="font-serif text-base md:text-lg text-stone-900 mb-1.5 line-clamp-1 font-normal">
-                        <Link to={`/product/${product.slug || product.id}`} className="hover:text-stone-600 transition-colors">
+                      <h3 className="font-serif text-base md:text-lg text-[#2e2a2b] mb-1.5 line-clamp-1 font-normal uppercase">
+                        <Link to={`/product/${product.slug || product.id}`} className="hover:text-[#e9a3a0] transition-colors">
                           {product.name}
                         </Link>
                       </h3>
-                      <p className="text-xs text-stone-400 font-light leading-relaxed line-clamp-2">
+                      <p className="text-xs text-stone-500 font-light leading-relaxed line-clamp-2">
                         {product.description || 'Formule concentrée pour régénérer et apaiser la peau en profondeur.'}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-4 border-t border-stone-100 mt-auto">
+                    <div className="flex items-center justify-between pt-4 border-t border-[#e3dcd3] mt-auto">
                       <div>
                         {product.has_promo ? (
                           <div className="flex items-baseline gap-2">
-                            <span className="text-sm md:text-base font-medium text-stone-900">{product.final_price} DA</span>
-                            <span className="line-through text-xs text-stone-400">{product.original_price} DA</span>
+                            <span className="text-sm md:text-base font-bold text-[#2b2626]">{fmt(product.final_price)}</span>
+                            <span className="line-through text-xs text-stone-400">{fmt(product.original_price)}</span>
                           </div>
                         ) : (
-                          <span className="text-sm md:text-base font-medium text-stone-900">
-                            {product.original_price || product.price} DA
+                          <span className="text-sm md:text-base font-bold text-[#2b2626]">
+                            {fmt(product.original_price || product.price)}
                           </span>
                         )}
                       </div>
 
                       <button
                         onClick={() => addToCart(product, 1)}
-                        className="bg-stone-900 text-white rounded-full p-2.5 md:p-3 hover:bg-stone-800 transition-colors group-hover:scale-105 flex items-center justify-center"
+                        className="bg-[#e9a3a0] text-white p-2.5 md:p-3 hover:brightness-105 transition-all group-hover:scale-105 flex items-center justify-center"
                         title="Ajouter au panier"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 4v16m8-8H4" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                         </svg>
                       </button>
                     </div>

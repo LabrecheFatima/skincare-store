@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
-import { Package, Plus, Trash2, Edit3, Upload, X, Check, Tag } from 'lucide-react';
+import { Package, Plus, Trash2, Edit3, Upload, X, Check, AlertCircle } from 'lucide-react';
 
 export default function AdminPacks() {
   const [packs, setPacks] = useState([]);
-  const [availableProducts, setAvailableProducts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPack, setEditingPack] = useState(null);
+  const [priceError, setPriceError] = useState('');
 
   // Formulaire Pack
   const [formData, setFormData] = useState({
@@ -19,7 +19,6 @@ export default function AdminPacks() {
     is_active: 1,
   });
 
-  const [selectedProducts, setSelectedProducts] = useState([]); // [{ product_id, quantity }]
   const [imageFiles, setImageFiles] = useState([]);
   const [existingImages, setExistingImages] = useState([]);
   const [imagesToDelete, setImagesToDelete] = useState([]);
@@ -28,63 +27,21 @@ export default function AdminPacks() {
     fetchData();
   }, []);
 
-  // Calcul automatique du Prix de base selon les produits sélectionnés
-  useEffect(() => {
-    const totalCalculated = selectedProducts.reduce((sum, item) => {
-      const prod = availableProducts.find(p => p.id === item.product_id);
-      return sum + (prod ? Number(prod.original_price || 0) * item.quantity : 0);
-    }, 0);
-
-    setFormData(prev => ({
-      ...prev,
-      original_price: totalCalculated > 0 ? totalCalculated.toString() : prev.original_price
-    }));
-  }, [selectedProducts, availableProducts]);
-
   const fetchData = async () => {
     try {
-      const [resPacks, resProds] = await Promise.all([
-        api.get('/admin/packs'),
-        api.get('/products?limit=1000')
-      ]);
-
+      const resPacks = await api.get('/admin/packs');
       setPacks(resPacks.data || []);
-
-      // Extraction sécurisée des produits de la page Produits
-      const prodsList = Array.isArray(resProds.data) 
-        ? resProds.data 
-        : (resProds.data?.data || []);
-
-      setAvailableProducts(prodsList);
     } catch (err) {
-      console.error('Erreur lors du chargement des packs/produits :', err);
+      console.error('Erreur lors du chargement des packs :', err);
     }
-  };
-
-  const handleAddProductToPack = (productId) => {
-    if (!productId) return;
-    const exists = selectedProducts.find(p => p.product_id === Number(productId));
-    if (exists) return;
-
-    setSelectedProducts([...selectedProducts, { product_id: Number(productId), quantity: 1 }]);
-  };
-
-  const handleQuantityChange = (productId, qty) => {
-    setSelectedProducts(selectedProducts.map(p => 
-      p.product_id === productId ? { ...p, quantity: Math.max(1, Number(qty)) } : p
-    ));
-  };
-
-  const handleRemoveProductFromPack = (productId) => {
-    setSelectedProducts(selectedProducts.filter(p => p.product_id !== productId));
   };
 
   const handleOpenAddModal = () => {
     setEditingPack(null);
-    setSelectedProducts([]);
     setImageFiles([]);
     setExistingImages([]);
     setImagesToDelete([]);
+    setPriceError('');
     setFormData({ 
       name: '', 
       slug: '', 
@@ -101,24 +58,14 @@ export default function AdminPacks() {
     setEditingPack(pack);
     setImageFiles([]);
     setImagesToDelete([]);
+    setPriceError('');
 
-    // Extraction des images existantes
     const imgs = pack.images 
       ? pack.images 
       : pack.image_url 
         ? [pack.image_url] 
         : [];
     setExistingImages(imgs);
-
-    // Extraction des produits associés au pack
-    if (pack.products && Array.isArray(pack.products)) {
-      setSelectedProducts(pack.products.map(p => ({
-        product_id: p.id || p.product_id,
-        quantity: p.pivot?.quantity || p.quantity || 1
-      })));
-    } else {
-      setSelectedProducts([]);
-    }
 
     setFormData({
       name: pack.name || '',
@@ -135,6 +82,17 @@ export default function AdminPacks() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setPriceError('');
+
+    const origPrice = parseFloat(formData.original_price);
+    const promoPrice = parseFloat(formData.promo_price);
+
+    // Validation côte client du prix promo vs prix de base
+    if (formData.promo_price !== '' && !isNaN(promoPrice) && !isNaN(origPrice) && promoPrice >= origPrice) {
+      setPriceError('Le prix promotionnel doit être strictement inférieur au prix de base.');
+      return;
+    }
+
     const data = new FormData();
     data.append('name', formData.name);
     data.append('slug', formData.slug);
@@ -143,7 +101,7 @@ export default function AdminPacks() {
     data.append('promo_price', formData.promo_price || '');
     data.append('stock_quantity', formData.stock_quantity);
     data.append('is_active', formData.is_active);
-    data.append('products', JSON.stringify(selectedProducts));
+    data.append('products', JSON.stringify([]));
 
     imageFiles.forEach(file => data.append('images', file));
     if (imagesToDelete.length > 0) {
@@ -274,6 +232,14 @@ export default function AdminPacks() {
               </button>
             </div>
 
+            {/* Panneau d'erreur de prix */}
+            {priceError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-700 text-xs font-medium">
+                <AlertCircle size={18} className="shrink-0 text-rose-600" />
+                <span>{priceError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               {/* Nom & Slug */}
               <div className="grid grid-cols-2 gap-4">
@@ -299,76 +265,6 @@ export default function AdminPacks() {
                 </div>
               </div>
 
-              {/* Sélection des Produits inclus (Synchronisé avec la page Produits) */}
-              <div className="p-3 border border-stone-200 rounded-xl bg-stone-50/80 space-y-3">
-                <label className="block font-semibold text-stone-800">Produits inclus dans le pack *</label>
-                
-                <select
-                  onChange={(e) => {
-                    handleAddProductToPack(e.target.value);
-                    e.target.value = "";
-                  }}
-                  className="w-full p-2.5 border border-stone-200 rounded-lg bg-white text-stone-700 focus:outline-none focus:border-stone-900"
-                  defaultValue=""
-                >
-                  <option value="" disabled>-- Ajouter un produit au pack --</option>
-                  {availableProducts.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.original_price} DA)
-                    </option>
-                  ))}
-                </select>
-
-                <div className="space-y-2 mt-2">
-                  {selectedProducts.map(sp => {
-                    const prod = availableProducts.find(p => p.id === sp.product_id);
-                    const imgUrl = prod?.image_url || (prod?.images && prod.images[0]);
-
-                    return (
-                      <div key={sp.product_id} className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-stone-200 shadow-xs">
-                        <div className="flex items-center gap-3">
-                          {imgUrl ? (
-                            <img
-                              src={`${api.defaults.baseURL.replace('/api', '')}${imgUrl}`}
-                              alt={prod?.name}
-                              className="w-10 h-10 object-cover rounded-md border border-stone-200"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 bg-stone-100 rounded-md border border-stone-200 flex items-center justify-center text-stone-400">
-                              <Package size={18} />
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-medium text-stone-800">{prod?.name || 'Produit'}</p>
-                            <p className="text-xs text-stone-400">{prod?.original_price} DA</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-stone-500">Qté:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={sp.quantity}
-                              onChange={(e) => handleQuantityChange(sp.product_id, e.target.value)}
-                              className="w-14 p-1 border border-stone-200 rounded text-center font-semibold"
-                            />
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={() => handleRemoveProductFromPack(sp.product_id)} 
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Tarification & Promotion */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -376,8 +272,11 @@ export default function AdminPacks() {
                   <input
                     type="number"
                     value={formData.original_price}
-                    onChange={(e) => setFormData({ ...formData, original_price: e.target.value })}
-                    className="w-full p-2 border border-stone-200 rounded-lg bg-stone-50 font-semibold text-stone-800"
+                    onChange={(e) => {
+                      setPriceError('');
+                      setFormData({ ...formData, original_price: e.target.value });
+                    }}
+                    className="w-full p-2 border border-stone-200 rounded-lg font-semibold text-stone-800 focus:outline-none focus:border-stone-900"
                     required
                   />
                 </div>
@@ -386,7 +285,10 @@ export default function AdminPacks() {
                   <input
                     type="number"
                     value={formData.promo_price}
-                    onChange={(e) => setFormData({ ...formData, promo_price: e.target.value })}
+                    onChange={(e) => {
+                      setPriceError('');
+                      setFormData({ ...formData, promo_price: e.target.value });
+                    }}
                     placeholder="Ex: 4500"
                     className="w-full p-2 border border-emerald-300 rounded-lg bg-emerald-50/30 focus:outline-none focus:border-emerald-600"
                   />
