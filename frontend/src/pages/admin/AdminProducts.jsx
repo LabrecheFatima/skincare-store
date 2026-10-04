@@ -116,6 +116,7 @@ export default function AdminProducts() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [lowStockCount, setLowStockCount] = useState(0);
   const latestRequest = useRef(0);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
   // État pour la notification / Toast stylé
@@ -196,7 +197,10 @@ export default function AdminProducts() {
       console.error('Erreur lors du chargement des données :', err);
       if (requestId === latestRequest.current) setError('Impossible de charger la liste des produits.');
     } finally {
-      if (requestId === latestRequest.current) setLoading(false);
+      if (requestId === latestRequest.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
   };
 
@@ -205,7 +209,7 @@ export default function AdminProducts() {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm.trim());
       setPage(1);
-    }, 350);
+    }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
@@ -483,11 +487,15 @@ export default function AdminProducts() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative w-full max-w-md">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+          {loading && hasLoaded && (
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+          )}
           <input
             type="text"
             placeholder="Rechercher un produit par nom ou slug..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { setDebouncedSearch(searchTerm.trim()); setPage(1); } }}
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 transition-colors"
           />
         </div>
@@ -512,7 +520,7 @@ export default function AdminProducts() {
       </div>
 
       {/* Tableau des Produits */}
-      {loading && products.length === 0 ? (
+      {loading && !hasLoaded ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-stone-200">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-stone-900 border-t-transparent"></div>
           <p className="text-sm text-stone-500 mt-3">Chargement des produits...</p>
@@ -529,7 +537,7 @@ export default function AdminProducts() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
-          <div className={`overflow-x-auto transition-opacity ${loading ? 'opacity-50' : ''}`}>
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-stone-50/80 border-b border-stone-200 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">

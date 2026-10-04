@@ -41,6 +41,10 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   const { id } = req.params;
   try {
+    // Détacher les produits et les packs de cette catégorie avant de la supprimer
+    await db('products').where({ category_id: id }).update({ category_id: null });
+    await db('packs').where({ category_id: id }).update({ category_id: null }).catch(() => {});
+
     await db('categories').where({ id }).del();
     res.json({ message: 'Catégorie supprimée' });
   } catch (err) {

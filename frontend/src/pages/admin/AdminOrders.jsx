@@ -103,6 +103,7 @@ const AdminOrders = () => {
   const [total, setTotal] = useState(0);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const latestRequest = useRef(0);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // État pour la modal de confirmation de suppression
   const [deleteModal, setDeleteModal] = useState({
@@ -125,7 +126,7 @@ const AdminOrders = () => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm.trim());
       setPage(1);
-    }, 350);
+    }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
@@ -178,7 +179,10 @@ const AdminOrders = () => {
     } catch (err) {
       console.error("Erreur chargement commandes :", err);
     } finally {
-      if (requestId === latestRequest.current) setLoading(false);
+      if (requestId === latestRequest.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
   };
 
@@ -322,11 +326,15 @@ const AdminOrders = () => {
       <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          {loading && hasLoaded && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+          )}
           <input
             type="text"
             placeholder="Rechercher par nom, téléphone, ID, wilaya..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { setDebouncedSearch(searchTerm.trim()); setPage(1); } }}
             className="w-full pl-9 pr-4 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 transition-all"
           />
         </div>
@@ -350,7 +358,7 @@ const AdminOrders = () => {
 
       {/* Tableau des Commandes */}
       <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        {loading && orders.length === 0 ? (
+        {loading && !hasLoaded ? (
           <div className="p-12 text-center text-stone-500 flex flex-col items-center gap-3">
             <RefreshCw className="w-6 h-6 animate-spin text-stone-400" />
             <span>Chargement des commandes...</span>
@@ -360,7 +368,7 @@ const AdminOrders = () => {
             Aucune commande trouvée.
           </div>
         ) : (
-          <div className={`overflow-x-auto transition-opacity ${loading ? 'opacity-50' : ''}`}>
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-stone-50/80 border-b border-stone-200 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">

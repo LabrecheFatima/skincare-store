@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { CartProvider } from './context/CartContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import ScrollToTop from './components/ScrollToTop'; // <-- 1. IMPORT DU COMPOSANT SCROLLTOTOP
 import Home from './pages/Home';
 import Shop from './pages/Shop';
 import ProductDetail from './pages/ProductDetail';
@@ -17,13 +18,14 @@ import AdminCategories from './pages/admin/AdminCategories';
 import AdminProducts from './pages/admin/AdminProducts';
 import AdminShipping from './pages/admin/AdminShipping';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminPacks from './pages/admin/AdminPacks'; // <-- 1. IMPORT DU COMPOSANT
+import AdminPacks from './pages/admin/AdminPacks';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
   return (
     <CartProvider>
       <Router>
+        <ScrollToTop /> {/* <-- 2. PLACEMENT DE SCROLLTOTOP ICI */}
         <Routes>
           {/* ==================== 1. ROUTES PUBLIQUES CLIENT ==================== */}
           <Route
@@ -52,7 +54,7 @@ export default function App() {
               <Route index element={<AdminDashboard />} />
               <Route path="orders" element={<AdminOrders />} />
               <Route path="products" element={<AdminProducts />} />
-              <Route path="packs" element={<AdminPacks />} /> {/* <-- 2. ROUTE DE LA PAGE PACKS */}
+              <Route path="packs" element={<AdminPacks />} />
               <Route path="categories" element={<AdminCategories />} /> 
               <Route path="shipping" element={<AdminShipping />} />
             </Route>

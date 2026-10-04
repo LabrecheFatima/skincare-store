@@ -6,9 +6,6 @@ import { useCart } from '../context/CartContext';
 
 // Assets & Composants annexes
 import bannerImg from '../assets/image-banner.png';
-import CategoriesSection from '../components/CategoriesSection';
-import AboutVideoSection from '../components/AboutVideoSection';
-import GlowSection from '../components/GlowSection';
 import PacksCarousel from '../components/PackCarousel';
 import { API_URL } from '../config';
 

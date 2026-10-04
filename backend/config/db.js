@@ -105,6 +105,7 @@ async function initDb() {
         table.string('name').notNullable();
         table.string('slug').notNullable().unique();
         table.text('description').nullable();
+        table.integer('category_id').references('id').inTable('categories').onDelete('SET NULL'); // Catégorie du pack
         table.decimal('original_price', 10, 2).notNullable();
         table.decimal('promo_price', 10, 2).nullable(); // Prix promotionnel du pack
         table.integer('stock_quantity').notNullable().defaultTo(0);
@@ -112,6 +113,14 @@ async function initDb() {
         table.boolean('is_active').defaultTo(true);
         table.timestamps(true, true);
       });
+    } else {
+      // Ajout rétroactif : catégorie des packs
+      const hasPackCategory = await db.schema.hasColumn('packs', 'category_id');
+      if (!hasPackCategory) {
+        await db.schema.table('packs', table => {
+          table.integer('category_id').nullable();
+        });
+      }
     }
 
     // Table Pack Images (Galerie d'images du pack)

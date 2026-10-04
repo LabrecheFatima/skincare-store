@@ -112,7 +112,18 @@ export default function AdminPacks() {
     promo_price: '',
     stock_quantity: '10',
     is_active: 1,
+    category_id: '',
   });
+
+  // Catégories (les mêmes que celles des produits)
+  const [categories, setCategories] = useState([]);
+  const getCategoryName = (id) => categories.find(cat => String(cat.id) === String(id))?.name;
+
+  useEffect(() => {
+    api.get('/categories')
+      .then(res => setCategories(res.data || []))
+      .catch(() => setCategories([]));
+  }, []);
 
   const [imageFiles, setImageFiles] = useState([]);
   const [existingImages, setExistingImages] = useState([]);
@@ -161,7 +172,8 @@ export default function AdminPacks() {
       original_price: '', 
       promo_price: '', 
       stock_quantity: '10', 
-      is_active: 1 
+      is_active: 1,
+      category_id: ''
     });
     setIsModalOpen(true);
   };
@@ -186,6 +198,7 @@ export default function AdminPacks() {
       promo_price: pack.promo_price ?? '',
       stock_quantity: pack.stock_quantity ?? '10',
       is_active: pack.is_active ?? 1,
+      category_id: pack.category_id || '',
     });
 
     setIsModalOpen(true);
@@ -211,6 +224,7 @@ export default function AdminPacks() {
     const data = new FormData();
     data.append('name', formData.name);
     data.append('slug', formData.slug);
+    data.append('category_id', formData.category_id || '');
     data.append('description', formData.description);
     data.append('original_price', formData.original_price);
     data.append('promo_price', formData.promo_price || '');
@@ -333,6 +347,11 @@ export default function AdminPacks() {
                           <div>
                             <p className="font-medium text-stone-900">{pack.name}</p>
                             <p className="text-xs text-stone-400 font-mono">{pack.slug}</p>
+                            {getCategoryName(pack.category_id) && (
+                              <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-stone-100 text-[10px] font-medium text-stone-600">
+                                {getCategoryName(pack.category_id)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -445,6 +464,21 @@ export default function AdminPacks() {
                     }`}
                   />
                 </div>
+              </div>
+
+              {/* Catégorie (mêmes catégories que les produits) */}
+              <div>
+                <label className="block font-medium mb-1.5 text-stone-700">Catégorie</label>
+                <select
+                  value={formData.category_id}
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                  className="w-full p-2.5 border border-stone-200 rounded-2xl font-medium text-stone-900 focus:outline-none focus:border-stone-900 bg-white"
+                >
+                  <option value="">Aucune catégorie</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Stock (peut être négatif = quantité à réapprovisionner) */}

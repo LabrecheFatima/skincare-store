@@ -5,6 +5,9 @@ import axios from 'axios';
 import { useCart } from '../context/CartContext';
 import { API_URL } from '../config';
 
+const PACKS_CATEGORY = '__packs__';
+const PAGE_STEP = 24; // nombre d'articles affichés à la fois
+
 const fmt = (n) => `${Number(n || 0).toLocaleString('fr-FR')} DA`;
 
 // Utility pour supprimer les accents et mettre en minuscules
@@ -16,9 +19,18 @@ const normalizeText = (text = '') =>
     .toLowerCase()
     .trim();
 
+// Prix courant d'un article : produit (has_promo/final_price) ou pack (promo_price/original_price)
+const getItemPrice = (item) => {
+  if (item.isPack) {
+    return Number(item.promo_price) > 0 ? Number(item.promo_price) : Number(item.original_price || item.price || 0);
+  }
+  return Number(item.has_promo ? item.final_price : (item.original_price || item.price || 0));
+};
+
 export default function Shop() {
   const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
+  const [packs, setPacks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +44,7 @@ export default function Shop() {
   const [priceRange, setPriceRange] = useState(20000);
   const [maxProductPrice, setMaxProductPrice] = useState(20000);
   const [sortBy, setSortBy] = useState('default');
+  const [visibleCount, setVisibleCount] = useState(PAGE_STEP);
 
   // Remonter tout en haut de la page au chargement du composant
   useEffect(() => {
@@ -53,16 +66,25 @@ export default function Shop() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [productsRes, categoriesRes] = await Promise.all([
-          axios.get(`${API_URL}/products`),
-          axios.get(`${API_URL}/categories`).catch(() => ({ data: [] }))
+        const [productsRes, categoriesRes, packsRes] = await Promise.all([
+          axios.get(`${API_URL}/products?limit=1000`),
+          axios.get(`${API_URL}/categories`).catch(() => ({ data: [] })),
+          axios.get(`${API_URL}/packs`).catch(() => ({ data: [] }))
         ]);
         
         const prods = productsRes.data.data || productsRes.data || [];
         setProducts(prods);
 
-        if (prods.length > 0) {
-          const maxP = Math.max(...prods.map(p => Number(p.has_promo ? p.final_price : (p.original_price || p.price || 0))));
+        const packList = packsRes.data.data || packsRes.data || [];
+        setPacks(Array.isArray(packList) ? packList : []);
+
+        const allForMax = [
+          ...prods.map(p => getItemPrice(p)),
+          ...(Array.isArray(packList) ? packList : []).map(p => getItemPrice({ ...p, isPack: true })),
+        ];
+
+        if (allForMax.length > 0) {
+          const maxP = Math.max(...allForMax);
           const roundedMax = Math.ceil(maxP / 1000) * 1000 || 20000;
           setMaxProductPrice(roundedMax);
           setPriceRange(roundedMax);
@@ -93,34 +115,68 @@ export default function Shop() {
     return `${cleanBaseUrl}/uploads/${filename}`;
   };
 
+  // Liste unifiée : produits + packs (chaque article a une clé unique, un prix et un lien)
+  const allItems = useMemo(() => {
+    const productItems = products.map(p => ({
+      ...p,
+      isPack: false,
+      key: `product-${p.id}`,
+      link: `/product/${p.slug || p.id}`,
+      currentPrice: getItemPrice(p),
+      onPromo: Boolean(p.has_promo),
+    }));
+    const packItems = packs.map(p => {
+      const item = { ...p, isPack: true };
+      return {
+        ...item,
+        key: `pack-${p.id}`,
+        link: `/pack/${p.slug || p.id}`,
+        currentPrice: getItemPrice(item),
+        onPromo: Number(p.promo_price) > 0,
+      };
+    });
+    return [...productItems, ...packItems];
+  }, [products, packs]);
+
   const filteredProducts = useMemo(() => {
     const normalizedQuery = normalizeText(searchQuery);
 
-    return products
-      .filter(product => {
+    return allItems
+      .filter(item => {
         // Recherche insensible aux accents et à la casse
-        const matchName = normalizeText(product.name).includes(normalizedQuery);
-        
-        const matchCategory = selectedCategory === 'all' || 
-          product.category_id === Number(selectedCategory) || 
-          product.category_slug === selectedCategory;
+        const matchName = normalizeText(item.name).includes(normalizedQuery);
 
-        const currentPrice = Number(product.has_promo ? product.final_price : (product.original_price || product.price));
-        const matchPrice = currentPrice <= priceRange;
+        let matchCategory;
+        if (selectedCategory === 'all') {
+          matchCategory = true;
+        } else if (selectedCategory === PACKS_CATEGORY) {
+          matchCategory = item.isPack;
+        } else {
+          // Produits ET packs : même catégorie (par id ou par slug)
+          matchCategory =
+            (item.category_id != null && Number(item.category_id) === Number(selectedCategory)) ||
+            (item.category_slug != null && item.category_slug === selectedCategory);
+        }
+
+        const matchPrice = item.currentPrice <= priceRange;
 
         return matchName && matchCategory && matchPrice;
       })
       .sort((a, b) => {
-        const priceA = Number(a.has_promo ? a.final_price : (a.original_price || a.price));
-        const priceB = Number(b.has_promo ? b.final_price : (b.original_price || b.price));
-
-        if (sortBy === 'price-asc') return priceA - priceB;
-        if (sortBy === 'price-desc') return priceB - priceA;
+        if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
+        if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
         if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
         if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
         return 0;
       });
-  }, [products, searchQuery, selectedCategory, priceRange, sortBy]);
+  }, [allItems, searchQuery, selectedCategory, priceRange, sortBy]);
+
+  // Quand les filtres changent, on revient aux premiers articles
+  useEffect(() => {
+    setVisibleCount(PAGE_STEP);
+  }, [searchQuery, selectedCategory, priceRange, sortBy]);
+
+  const visibleItems = filteredProducts.slice(0, visibleCount);
 
   const handleResetFilters = () => {
     setSearchInput('');
@@ -130,7 +186,8 @@ export default function Shop() {
     setSortBy('default');
   };
 
-  const FilterContent = () => (
+  // Élément JSX (et non un composant interne) : le champ de recherche n'est plus recréé à chaque frappe
+  const filterContent = (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
         <div className="md:col-span-8 relative">
@@ -207,8 +264,20 @@ export default function Shop() {
                 : 'bg-white text-stone-600 hover:bg-[#f1ede7] border border-[#e3dcd3]'
             }`}
           >
-            Toutes ({products.length})
+            Toutes ({allItems.length})
           </button>
+          {packs.length > 0 && (
+            <button
+              onClick={() => setSelectedCategory(PACKS_CATEGORY)}
+              className={`px-5 py-2.5 text-xs transition-all whitespace-nowrap uppercase tracking-wider cursor-pointer ${
+                selectedCategory === PACKS_CATEGORY
+                  ? 'bg-[#2e2a2b] text-[#e6ddd3]'
+                  : 'bg-white text-stone-600 hover:bg-[#f1ede7] border border-[#e3dcd3]'
+              }`}
+            >
+              Packs ({packs.length})
+            </button>
+          )}
           {categories.map((cat) => {
             const catId = cat.id || cat.slug;
             return (
@@ -273,7 +342,7 @@ export default function Shop() {
 
         {/* Bloc filtre bureau */}
         <div className="hidden md:block bg-[#f1ede7] p-6 border border-[#e3dcd3] mb-12">
-          <FilterContent />
+          {filterContent}
         </div>
 
         {/* Offcanvas Filtre Mobile */}
@@ -308,7 +377,7 @@ export default function Shop() {
                     </button>
                   </div>
 
-                  <FilterContent />
+                  {filterContent}
                 </div>
 
                 <div className="pt-6 mt-6 border-t border-[#e3dcd3] flex gap-3">
@@ -326,7 +395,7 @@ export default function Shop() {
 
         <div className="mb-6 px-1 flex items-center justify-between">
           <p className="text-xs text-stone-500 tracking-wide">
-            <span className="font-semibold text-[#2b2626]">{filteredProducts.length}</span> soin(s) disponible(s)
+            <span className="font-semibold text-[#2b2626]">{filteredProducts.length}</span> article(s) disponible(s)
           </p>
         </div>
 
@@ -336,7 +405,7 @@ export default function Shop() {
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="text-center py-16 bg-[#f1ede7] border border-[#e3dcd3] p-8 max-w-md mx-auto">
-            <p className="text-stone-600 font-light text-xs mb-6">Aucun soin ne correspond à ces critères de recherche.</p>
+            <p className="text-stone-600 font-light text-xs mb-6">Aucun article ne correspond à ces critères de recherche.</p>
             <button
               onClick={handleResetFilters}
               className="bg-[#e9a3a0] text-white px-6 py-3 text-xs uppercase tracking-[0.08em] font-semibold hover:brightness-105 transition-all inline-flex items-center gap-2 cursor-pointer"
@@ -345,11 +414,12 @@ export default function Shop() {
             </button>
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             <AnimatePresence>
-              {filteredProducts.map((product) => (
+              {visibleItems.map((product) => (
                 <motion.div
-                  key={product.id}
+                  key={product.key}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
@@ -357,17 +427,17 @@ export default function Shop() {
                   className="bg-white border border-[#e3dcd3] overflow-hidden flex flex-col justify-between group hover:shadow-md transition-all duration-300"
                 >
                   <div className="relative">
-                    {product.has_promo ? (
+                    {product.onPromo ? (
                       <span className="absolute top-4 left-4 z-10 bg-[#e9a3a0] text-[#2b2626] text-[9px] font-bold tracking-widest uppercase px-3 py-1">
-                        Promo
+                        {product.isPack ? 'Pack Promo' : 'Promo'}
                       </span>
                     ) : (
                       <span className="absolute top-4 left-4 z-10 bg-[#2e2a2b]/80 text-[#e6ddd3] text-[9px] font-medium tracking-widest uppercase px-3 py-1">
-                        Soin
+                        {product.isPack ? 'Pack' : 'Soin'}
                       </span>
                     )}
 
-                    <Link to={`/product/${product.slug || product.id}`} className="block h-64 md:h-72 p-6 bg-white border-b border-[#e3dcd3] flex items-center justify-center overflow-hidden">
+                    <Link to={product.link} className="block h-64 md:h-72 p-6 bg-white border-b border-[#e3dcd3] flex items-center justify-center overflow-hidden">
                       <img
                         src={getImageUrl(product.image_url)}
                         alt={product.name}
@@ -379,25 +449,32 @@ export default function Shop() {
                   <div className="p-5 md:p-6 flex flex-col justify-between flex-1 bg-[#f1ede7]/50">
                     <div className="mb-4">
                       <h3 className="font-serif text-base md:text-lg text-[#2e2a2b] mb-1.5 line-clamp-1 font-normal uppercase">
-                        <Link to={`/product/${product.slug || product.id}`} className="hover:text-[#e9a3a0] transition-colors">
+                        <Link to={product.link} className="hover:text-[#e9a3a0] transition-colors">
                           {product.name}
                         </Link>
                       </h3>
                       <p className="text-xs text-stone-500 font-light leading-relaxed line-clamp-2">
-                        {product.description || 'Formule concentrée pour régénérer et apaiser la peau en profondeur.'}
+                        {product.description || (product.isPack
+                          ? 'Une routine soin complète à prix préférentiel.'
+                          : 'Formule concentrée pour régénérer et apaiser la peau en profondeur.')}
                       </p>
+                      {product.isPack && Array.isArray(product.products) && product.products.length > 0 && (
+                        <p className="text-[10px] uppercase tracking-widest text-stone-400 mt-2">
+                          {product.products.length} produit(s) inclus
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between pt-4 border-t border-[#e3dcd3] mt-auto">
                       <div>
-                        {product.has_promo ? (
+                        {product.onPromo ? (
                           <div className="flex items-baseline gap-2">
-                            <span className="text-sm md:text-base font-bold text-[#2b2626]">{fmt(product.final_price)}</span>
+                            <span className="text-sm md:text-base font-bold text-[#2b2626]">{fmt(product.currentPrice)}</span>
                             <span className="line-through text-xs text-stone-400">{fmt(product.original_price)}</span>
                           </div>
                         ) : (
                           <span className="text-sm md:text-base font-bold text-[#2b2626]">
-                            {fmt(product.original_price || product.price)}
+                            {fmt(product.currentPrice)}
                           </span>
                         )}
                       </div>
@@ -417,6 +494,18 @@ export default function Shop() {
               ))}
             </AnimatePresence>
           </div>
+
+          {visibleCount < filteredProducts.length && (
+            <div className="text-center mt-10">
+              <button
+                onClick={() => setVisibleCount(count => count + PAGE_STEP)}
+                className="bg-[#2e2a2b] text-[#e6ddd3] px-8 py-3.5 text-xs uppercase tracking-[0.08em] font-medium hover:bg-[#3a3536] transition-colors cursor-pointer"
+              >
+                Voir plus ({filteredProducts.length - visibleCount} restants)
+              </button>
+            </div>
+          )}
+          </>
         )}
 
       </div>

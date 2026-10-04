@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { useCart } from '../context/CartContext';
 import { API_URL } from '../config';
@@ -13,294 +13,243 @@ export default function PackDetail() {
 
   const [pack, setPack] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [error, setError] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const [addedNotice, setAddedNotice] = useState(false);
-  const [activeTab, setActiveTab] = useState('description');
+  const [added, setAdded] = useState(false);
 
-  // Remonter en haut de page dès qu'on change de pack ou d'ID
+  // Remonter en haut de la page au chargement
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   }, [id]);
 
+  // Récupération des données du pack
   useEffect(() => {
     const fetchPack = async () => {
       try {
         setLoading(true);
-        setSelectedImageIndex(0);
+        setError(null);
         const res = await axios.get(`${API_URL}/packs/${id}`);
-        const data = res.data.data || res.data;
-        setPack(data);
-      } catch (error) {
-        console.error("Erreur de chargement du pack :", error);
+        setPack(res.data);
+      } catch (err) {
+        console.error('Erreur de chargement du pack :', err);
+        setError('Impossible de charger ce pack promo.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPack();
+    if (id) fetchPack();
   }, [id]);
 
-  const getImagesList = () => {
-    if (!pack) return [];
-    
-    let list = [];
-    if (pack.images && Array.isArray(pack.images) && pack.images.length > 0) {
-      list = pack.images.map(img => typeof img === 'string' ? img : (img.url || img.path));
-    } else if (pack.image_url) {
-      list = [pack.image_url];
-    }
-
-    if (pack.gallery && Array.isArray(pack.gallery)) {
-      list = [...list, ...pack.gallery];
-    }
-
-    return list.filter(Boolean);
-  };
-
-  const imagesList = getImagesList();
-
+  // Utilitaire d'image identique à Shop.jsx
   const getImageUrl = (imageUrl) => {
     if (!imageUrl) return '/placeholder.png';
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
-
     const filename = imageUrl.split('/').pop();
     const cleanBaseUrl = API_URL.replace(/\/(api|uploads)\/?$/, '');
     return `${cleanBaseUrl}/uploads/${filename}`;
   };
 
   const handleAddToCart = () => {
-    if (pack) {
-      addToCart({ ...pack, isPack: true }, quantity);
-      setAddedNotice(true);
-      setTimeout(() => setAddedNotice(false), 2500);
-    }
+    if (!pack) return;
+    const packItem = {
+      ...pack,
+      isPack: true,
+      currentPrice: Number(pack.promo_price) > 0 ? Number(pack.promo_price) : Number(pack.original_price || 0)
+    };
+    addToCart(packItem, quantity);
+    setAdded(true);
+    setTimeout(() => setAdded(false), 2000);
   };
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-[#f8f5f1] pt-32 pb-24 flex items-center justify-center font-sans text-stone-500 text-xs uppercase tracking-widest">
-        Chargement de votre pack...
+      <div className="w-full min-h-screen bg-[#f8f5f1] pt-32 pb-24 flex items-center justify-center">
+        <p className="text-stone-400 font-light text-xs tracking-widest uppercase animate-pulse">
+          Chargement du pack d'exception...
+        </p>
       </div>
     );
   }
 
-  if (!pack) {
+  if (error || !pack) {
     return (
-      <div className="w-full min-h-screen bg-[#f8f5f1] pt-32 pb-24 font-sans text-[#2b2626] flex items-center justify-center">
-        <div className="text-center bg-[#f1ede7] p-10 border border-[#e3dcd3] max-w-md mx-auto">
-          <h2 className="font-serif text-2xl font-normal text-[#2e2a2b] uppercase mb-3">Pack introuvable</h2>
-          <p className="text-xs text-stone-600 font-light mb-6">Le pack demandé n'existe pas ou a été retiré.</p>
-          <Link
-            to="/"
-            className="inline-block bg-[#e9a3a0] text-white text-xs px-6 py-3 uppercase tracking-[0.08em] font-semibold hover:brightness-105 transition-all"
-          >
-            Retour à l'accueil
-          </Link>
-        </div>
+      <div className="w-full min-h-screen bg-[#f8f5f1] pt-32 pb-24 flex flex-col items-center justify-center px-4">
+        <h2 className="font-serif text-2xl text-[#2e2a2b] mb-4 uppercase">Pack introuvable</h2>
+        <p className="text-stone-500 text-xs mb-8 font-light text-center">{error || "Ce pack n'est plus disponible."}</p>
+        <Link
+          to="/shop"
+          className="bg-[#2e2a2b] text-[#e6ddd3] px-8 py-3.5 text-xs uppercase tracking-[0.08em] font-medium hover:bg-[#3a3536] transition-colors"
+        >
+          Retourner à la boutique
+        </Link>
       </div>
     );
   }
 
-  const hasPromo = pack.promo_price && Number(pack.promo_price) > 0;
-  const currentPrice = Number(hasPromo ? pack.promo_price : (pack.original_price || pack.price || 0));
+  const images = pack.images && pack.images.length > 0 ? pack.images : [pack.image_url];
+  const hasPromo = Number(pack.promo_price) > 0;
+  const currentPrice = hasPromo ? Number(pack.promo_price) : Number(pack.original_price || 0);
 
   return (
-    <div className="w-full min-h-screen bg-[#f8f5f1] pb-20 font-sans text-[#2b2626]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 pt-6 md:pt-8">
-        
-        {/* Fil d'Ariane */}
-        <div className="mb-8 flex items-center gap-2 text-xs font-light text-stone-400">
-          <Link to="/" className="hover:text-stone-800 transition-colors">Accueil</Link>
+    <div className="w-full min-h-screen bg-[#f8f5f1] pt-24 md:pt-32 pb-24 font-sans text-[#2b2626]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12">
+        {/* Navigation Fil d'Ariane */}
+        <nav className="text-[10px] uppercase tracking-widest text-stone-400 mb-8 flex items-center gap-2">
+          <Link to="/" className="hover:text-[#2b2626] transition-colors">Accueil</Link>
           <span>/</span>
-          <span className="text-stone-400">Packs Exclusifs</span>
+          <Link to="/shop" className="hover:text-[#2b2626] transition-colors">Boutique</Link>
           <span>/</span>
-          <span className="text-stone-800 truncate font-normal">{pack.name}</span>
-        </div>
+          <span className="text-[#2b2626] font-medium truncate">{pack.name}</span>
+        </nav>
 
-        {/* SECTION PRINCIPALE PACK */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12 items-start mb-16">
-          
-          {/* GALERIE PHOTOS MULTIPLES */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="relative bg-white border border-[#e3dcd3] h-96 md:h-[500px] w-full flex items-center justify-center overflow-hidden group p-2">
-              {hasPromo && (
-                <span className="absolute top-4 left-4 z-10 bg-[#e9a3a0] text-[#2b2626] text-[10px] font-bold tracking-wider uppercase px-3 py-1">
-                  Pack Promo
-                </span>
-              )}
-
-              {imagesList.length > 0 ? (
-                <motion.img
-                  key={selectedImageIndex}
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.3 }}
-                  src={getImageUrl(imagesList[selectedImageIndex])}
-                  alt={pack.name}
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <div className="text-center text-stone-400">
-                  <span className="text-[10px] uppercase tracking-widest">Image non disponible</span>
-                </div>
-              )}
-
-              {imagesList.length > 1 && (
-                <>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start mb-16">
+          {/* Galerie Images (Gauche) */}
+          <div className="lg:col-span-7 flex flex-col-reverse md:flex-row gap-4">
+            {images.length > 1 && (
+              <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto max-h-[500px] scrollbar-none shrink-0">
+                {images.map((img, idx) => (
                   <button
-                    onClick={() => setSelectedImageIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1))}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 w-9 h-9 bg-[#2e2a2b]/85 text-[#e9e1d8] flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity z-10"
-                  >
-                    ←
-                  </button>
-                  <button
-                    onClick={() => setSelectedImageIndex((prev) => (prev === imagesList.length - 1 ? 0 : prev + 1))}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 w-9 h-9 bg-[#2e2a2b]/85 text-[#e9e1d8] flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity z-10"
-                  >
-                    →
-                  </button>
-                </>
-              )}
-            </div>
-
-            {imagesList.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
-                {imagesList.map((img, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedImageIndex(index)}
-                    className={`w-20 h-20 bg-white border shrink-0 overflow-hidden transition-all ${
-                      selectedImageIndex === index
-                        ? 'border-[#e9a3a0] ring-1 ring-[#e9a3a0]'
-                        : 'border-[#e3dcd3] opacity-60 hover:opacity-100'
+                    key={idx}
+                    onClick={() => setSelectedImage(idx)}
+                    className={`w-16 h-16 md:w-20 md:h-20 bg-white border p-2 transition-all cursor-pointer shrink-0 ${
+                      selectedImage === idx ? 'border-[#2e2a2b]' : 'border-[#e3dcd3] opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img src={getImageUrl(img)} alt="" className="w-full h-full object-contain p-1" />
+                    <img
+                      src={getImageUrl(img)}
+                      alt=""
+                      className="w-full h-full object-contain"
+                    />
                   </button>
                 ))}
               </div>
             )}
+
+            <div className="flex-1 bg-white border border-[#e3dcd3] p-8 relative flex items-center justify-center min-h-[380px] md:min-h-[500px]">
+              <span className="absolute top-4 left-4 z-10 bg-[#e9a3a0] text-[#2b2626] text-[9px] font-bold tracking-widest uppercase px-3 py-1">
+                Pack Offre Spéciale
+              </span>
+              <motion.img
+                key={selectedImage}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                src={getImageUrl(images[selectedImage])}
+                alt={pack.name}
+                className="max-h-[420px] max-w-full object-contain"
+              />
+            </div>
           </div>
 
-          {/* INFORMATIONS & ACHAT */}
-          <div className="lg:col-span-5 bg-[#2e2a2b] text-[#e6ddd3] p-6 md:p-8 space-y-6">
+          {/* Informations Pack & Achat (Droite) */}
+          <div className="lg:col-span-5 flex flex-col justify-between">
             <div>
-              <span className="text-[11px] text-[#a89f97] block mb-2 uppercase tracking-[0.08em]">
-                Offre Complète Soin
+              <span className="text-[10px] md:text-[11px] font-medium uppercase tracking-[0.2em] text-stone-400 block mb-2">
+                Routine complète & Avantage Prix
               </span>
-              
-              <h1 className="text-2xl md:text-4xl font-serif font-normal uppercase tracking-[0.04em] leading-tight text-[#e9e1d8] mb-3">
+              <h1 className="text-2xl md:text-4xl font-serif tracking-tight text-[#2e2a2b] mb-4 font-normal uppercase">
                 {pack.name}
               </h1>
 
-              <div className="flex items-baseline gap-3 mb-4">
-                {hasPromo ? (
-                  <>
-                    <span className="text-xl md:text-2xl font-bold text-white">{fmt(pack.promo_price)}</span>
-                    <span className="line-through text-sm text-[#a89f97]">{fmt(pack.original_price)}</span>
-                  </>
-                ) : (
-                  <span className="text-xl md:text-2xl font-bold text-white">
-                    {fmt(pack.original_price || pack.price)}
+              {/* Prix */}
+              <div className="flex items-baseline gap-3 mb-6 pb-6 border-b border-[#e3dcd3]">
+                <span className="text-2xl md:text-3xl font-bold text-[#2b2626]">
+                  {fmt(currentPrice)}
+                </span>
+                {hasPromo && (
+                  <span className="line-through text-sm md:text-base text-stone-400">
+                    {fmt(pack.original_price)}
                   </span>
                 )}
               </div>
-            </div>
 
-            <p className="text-[13px] text-[#d8cfc6] leading-relaxed border-t border-white/10 pt-4">
-              {pack.description || 'Profitez d’une routine soin complète soigneusement sélectionnée pour vous offrir des résultats optimaux à un prix préférentiel.'}
-            </p>
+              {/* Description */}
+              <p className="text-stone-600 font-light text-xs md:text-sm leading-relaxed mb-8">
+                {pack.description || "Profitez de cette combinaison de soins sélectionnée pour offrir une synergie parfaite à votre peau à un tarif préférentiel."}
+              </p>
 
-            {/* AVANTAGES LIVRAISON & QUALITÉ */}
-            <div className="grid grid-cols-2 gap-3 py-3 border-y border-white/10 text-[11px] text-[#c9bfb5]">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e9a3a0] shrink-0" />
-                <span>Livraison 58 Wilayas</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e9a3a0] shrink-0" />
-                <span>Économie garantie</span>
-              </div>
-            </div>
-
-            {/* BOUTON D'AJOUT AU PANIER */}
-            <div className="space-y-4 pt-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[#a89f97] font-medium">Quantité</span>
-                <div className="flex items-center border border-white/25 px-3 py-1">
-                  <button
-                    onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-                    className="w-6 h-6 flex items-center justify-center text-[#c9bfb5] hover:text-white text-sm font-medium"
-                  >
-                    -
-                  </button>
-                  <span className="w-8 text-center text-xs font-medium text-white">{quantity}</span>
-                  <button
-                    onClick={() => setQuantity(prev => prev + 1)}
-                    className="w-6 h-6 flex items-center justify-center text-[#c9bfb5] hover:text-white text-sm font-medium"
-                  >
-                    +
-                  </button>
+              {/* Quantité & Bouton Ajouter */}
+              <div className="space-y-4 mb-8">
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] uppercase tracking-widest text-stone-500 font-medium">Quantité</span>
+                  <div className="flex items-center border border-[#e3dcd3] bg-white">
+                    <button
+                      onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                      className="px-3 py-2 text-stone-500 hover:text-[#2b2626] cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="px-4 py-2 text-xs font-semibold">{quantity}</span>
+                    <button
+                      onClick={() => setQuantity(q => q + 1)}
+                      className="px-3 py-2 text-stone-500 hover:text-[#2b2626] cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <button
-                onClick={handleAddToCart}
-                className="w-full bg-[#e9a3a0] text-white py-4 text-xs font-semibold uppercase tracking-[0.08em] hover:brightness-105 transition-all flex items-center justify-center gap-2"
-              >
-                <span>Ajouter le pack au panier</span>
-                <span>•</span>
-                <span>{fmt(currentPrice * quantity)}</span>
-              </button>
-
-              {addedNotice && (
-                <motion.p
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-[11px] text-[#e9a3a0] text-center font-medium"
+                <button
+                  onClick={handleAddToCart}
+                  className="w-full bg-[#e9a3a0] text-white py-4 text-xs font-semibold uppercase tracking-[0.1em] hover:brightness-105 transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2"
                 >
-                  ✓ Pack ajouté au panier avec succès !
-                </motion.p>
-              )}
+                  {added ? (
+                    <>
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Ajouté au panier !
+                    </>
+                  ) : (
+                    'Ajouter le pack au panier'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section Produit(s) Inclus dans le Pack */}
+        {Array.isArray(pack.products) && pack.products.length > 0 && (
+          <div className="mt-16 pt-12 border-t border-[#e3dcd3]">
+            <div className="text-center max-w-xl mx-auto mb-10">
+              <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1">Composition</span>
+              <h2 className="text-2xl font-serif text-[#2e2a2b] uppercase font-normal">
+                Produits inclus dans ce coffret
+              </h2>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {pack.products.map((prod) => (
+                <div
+                  key={prod.product_id || prod.id}
+                  className="bg-white border border-[#e3dcd3] p-5 flex items-center gap-4"
+                >
+                  <div className="w-20 h-20 bg-[#f8f5f1] border border-[#e3dcd3] shrink-0 p-2 flex items-center justify-center">
+                    <img
+                      src={getImageUrl(prod.image_url)}
+                      alt={prod.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-sm text-[#2e2a2b] font-normal uppercase mb-1 line-clamp-1">
+                      {prod.name}
+                    </h3>
+                    <p className="text-[10px] text-stone-400 uppercase tracking-wider mb-1">
+                      Quantité : <strong className="text-[#2b2626] font-semibold">{prod.quantity || 1}</strong>
+                    </p>
+                    <span className="text-xs text-stone-500 line-through">
+                      {fmt(prod.original_price)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-
-        </div>
-
-        {/* SECTION ONGLETS : DESCRIPTION ET RITUEL */}
-        <div className="bg-[#f1ede7] border border-[#e3dcd3] p-6 md:p-10 mb-16">
-          <div className="flex items-center gap-8 border-b border-[#ddd3c8] pb-4 mb-6">
-            <button
-              onClick={() => setActiveTab('description')}
-              className={`text-xs uppercase tracking-[0.08em] font-semibold transition-colors pb-1 ${
-                activeTab === 'description' ? 'text-[#2e2a2b] border-b-2 border-[#e9a3a0]' : 'text-stone-400 hover:text-stone-700'
-              }`}
-            >
-              Description du Pack
-            </button>
-            <button
-              onClick={() => setActiveTab('details')}
-              className={`text-xs uppercase tracking-[0.08em] font-semibold transition-colors pb-1 ${
-                activeTab === 'details' ? 'text-[#2e2a2b] border-b-2 border-[#e9a3a0]' : 'text-stone-400 hover:text-stone-700'
-              }`}
-            >
-              Conseils & Rituel
-            </button>
-          </div>
-
-          {activeTab === 'description' ? (
-            <p className="text-[13px] text-stone-600 leading-relaxed">
-              {pack.description || 'Ce pack associe plusieurs soins complémentaires pour maximiser les bienfaits sur votre peau au quotidien.'}
-            </p>
-          ) : (
-            <p className="text-[13px] text-stone-600 leading-relaxed">
-              {pack.usage_instructions || 'Utilisez les produits inclus selon la routine recommandée : nettoyez la peau, appliquez le sérum puis scellez avec la crème hydratante.'}
-            </p>
-          )}
-        </div>
-
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,15 @@ const fs = require('fs');
 // Stock : accepte 0 et les valeurs négatives (10 uniquement si la valeur est absente/invalide)
 const parseStock = (v) => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? 10 : Number(v);
 
+// Catégorie : renvoie un id valide (qui existe en base) ou null
+async function resolveCategoryId(raw) {
+  if (raw === undefined || raw === null || raw === '' || raw === 'null') return null;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const category = await db('categories').where({ id }).first();
+  return category ? id : null;
+}
+
 // Fonction utilitaire pour traiter et enregistrer une image WebP
 async function processAndSaveImage(file) {
   const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.webp';
@@ -25,7 +34,10 @@ async function processAndSaveImage(file) {
 // Récupérer tous les packs avec leurs produits inclus et leurs images
 exports.getAll = async (req, res) => {
   try {
-    const packs = await db('packs').select('*');
+    // Public : uniquement les packs actifs. Admin (req.admin posé par le middleware auth) : tous.
+    let packsQuery = db('packs');
+    if (!req.admin) packsQuery = packsQuery.where('is_active', 1);
+    const packs = await packsQuery.select('*');
     if (packs.length === 0) return res.json([]);
 
     const packIds = packs.map(p => p.id);
@@ -133,7 +145,7 @@ exports.getAllAdmin = async (req, res) => {
 
 // Créer un nouveau pack
 exports.create = async (req, res) => {
-  const { name, slug, description, original_price, promo_price, stock_quantity, is_active, products, items } = req.body;
+  const { name, slug, description, category_id, original_price, promo_price, stock_quantity, is_active, products, items } = req.body;
 
   let rawProducts = products || items || [];
   if (typeof rawProducts === 'string') {
@@ -149,6 +161,7 @@ exports.create = async (req, res) => {
     const [packId] = await db('packs').insert({
       name,
       slug,
+      category_id: await resolveCategoryId(category_id),
       description: description || '',
       original_price: Number(original_price) || 0,
       promo_price: promo_price ? Number(promo_price) : null,
@@ -187,7 +200,7 @@ exports.create = async (req, res) => {
 // Mettre à jour un pack
 exports.update = async (req, res) => {
   const { id } = req.params;
-  const { name, slug, description, original_price, promo_price, stock_quantity, is_active, products, items, delete_images } = req.body;
+  const { name, slug, description, category_id, original_price, promo_price, stock_quantity, is_active, products, items, delete_images } = req.body;
 
   let rawProducts = products || items;
   if (typeof rawProducts === 'string') {
@@ -200,9 +213,13 @@ exports.update = async (req, res) => {
 
   try {
     // 1. Mise à jour de la table packs
+    // La catégorie n'est modifiée que si le champ est envoyé par le formulaire
+    const categoryUpdate = category_id === undefined ? {} : { category_id: await resolveCategoryId(category_id) };
+
     await db('packs').where({ id }).update({
       name,
       slug,
+      ...categoryUpdate,
       description: description || '',
       original_price: Number(original_price) || 0,
       promo_price: promo_price ? Number(promo_price) : null,
@@ -239,11 +256,12 @@ exports.update = async (req, res) => {
         imageRecords.push({ pack_id: id, image_url: imageUrl });
       }
       await db('pack_images').insert(imageRecords).catch(() => {});
-      
-      const firstImg = await db('pack_images').where({ pack_id: id }).first().catch(() => null);
-      if (firstImg) {
-        await db('packs').where({ id }).update({ image_url: firstImg.image_url }).catch(() => {});
-      }
+    }
+
+    // 5. Resynchroniser l'image principale (après ajout ET/OU suppression d'images)
+    if (delete_images || (req.files && req.files.length > 0)) {
+      const firstImg = await db('pack_images').where({ pack_id: id }).orderBy('id', 'asc').first().catch(() => null);
+      await db('packs').where({ id }).update({ image_url: firstImg ? firstImg.image_url : null }).catch(() => {});
     }
 
     res.json({ message: 'Pack mis à jour avec succès' });
@@ -267,7 +285,7 @@ exports.getOne = async (req, res) => {
       .where(isNum ? { id: Number(identifier) } : { slug: identifier })
       .first();
 
-    if (!pack) {
+    if (!pack || (!req.admin && !pack.is_active)) {
       return res.status(404).json({ error: 'Pack non trouvé' });
     }
 
