@@ -3,6 +3,9 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 
+// Stock : accepte 0 et les valeurs négatives (10 uniquement si la valeur est absente/invalide)
+const parseStock = (v) => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? 10 : Number(v);
+
 // Fonction utilitaire pour traiter et enregistrer une image WebP
 async function processAndSaveImage(file) {
   const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.webp';
@@ -86,7 +89,7 @@ exports.create = async (req, res) => {
       description: description || '',
       original_price: Number(original_price) || 0,
       promo_price: promo_price ? Number(promo_price) : null,
-      stock_quantity: stock_quantity ? Number(stock_quantity) : 10,
+      stock_quantity: parseStock(stock_quantity),
       is_active: is_active !== undefined ? Number(is_active) : 1
     });
 
@@ -140,7 +143,7 @@ exports.update = async (req, res) => {
       description: description || '',
       original_price: Number(original_price) || 0,
       promo_price: promo_price ? Number(promo_price) : null,
-      stock_quantity: stock_quantity ? Number(stock_quantity) : 10,
+      stock_quantity: parseStock(stock_quantity),
       is_active: is_active !== undefined ? Number(is_active) : 1
     });
 

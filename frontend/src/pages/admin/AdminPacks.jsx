@@ -109,7 +109,6 @@ export default function AdminPacks() {
     data.append('promo_price', formData.promo_price || '');
     data.append('stock_quantity', formData.stock_quantity);
     data.append('is_active', formData.is_active);
-    data.append('products', JSON.stringify([]));
 
     imageFiles.forEach(file => data.append('images', file));
     if (imagesToDelete.length > 0) {
@@ -213,7 +212,12 @@ export default function AdminPacks() {
                       <td className="py-4 px-6 font-semibold text-emerald-700">
                         {pack.promo_price ? `${pack.promo_price} DA` : '-'}
                       </td>
-                      <td className="py-4 px-6 text-stone-600">{pack.stock_quantity}</td>
+                      <td className={`py-4 px-6 font-medium ${Number(pack.stock_quantity) < 0 ? 'text-rose-600' : 'text-stone-600'}`}>
+                        {pack.stock_quantity}
+                        {Number(pack.stock_quantity) < 0 && (
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider">À réapprovisionner</span>
+                        )}
+                      </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -305,6 +309,21 @@ export default function AdminPacks() {
                     }`}
                   />
                 </div>
+              </div>
+
+              {/* Stock (peut être négatif = quantité à réapprovisionner) */}
+              <div>
+                <label className="block font-medium mb-1.5 text-stone-700">Stock du pack</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={formData.stock_quantity}
+                  onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                  className="w-full p-2.5 border border-stone-200 rounded-2xl font-medium text-stone-900 focus:outline-none focus:border-stone-900"
+                />
+                <p className="mt-1 text-[11px] text-stone-400">
+                  Diminue à chaque commande confirmée, est restitué en cas d'annulation, et peut devenir négatif (ex : -3 = 3 packs à réapprovisionner).
+                </p>
               </div>
 
               {/* Alerte d'erreur personnalisée style image */}

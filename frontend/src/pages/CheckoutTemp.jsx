@@ -111,6 +111,7 @@ export default function Checkout() {
         // Envoie uniquement les articles présents dans l'état React à l'instant T
         items: cart.map(item => ({
           id: item.id || item.product_id,
+          isPack: Boolean(item.isPack || item.is_pack),
           qty: item.qty || item.quantity || 1,
           price: Number(item.has_promo ? item.final_price : (item.promo_price ?? item.price ?? item.original_price ?? 0))
         }))
@@ -259,9 +260,10 @@ export default function Checkout() {
                 const itemPrice = Number(item.has_promo ? item.final_price : (item.promo_price ?? item.price ?? item.original_price ?? 0));
                 const itemQty = item.qty || item.quantity || 1;
                 const itemId = item.id || item.product_id;
+                const itemIsPack = Boolean(item.isPack || item.is_pack);
 
                 return (
-                  <div key={itemId || index} className="flex items-center gap-4 pb-4 border-b border-stone-100 relative group">
+                  <div key={`${itemIsPack ? 'pack' : 'product'}-${itemId ?? index}`} className="flex items-center gap-4 pb-4 border-b border-stone-100 relative group">
                     <div className="w-16 h-16 bg-[#FBF9F5] rounded-xl border border-stone-200/60 p-1 flex items-center justify-center shrink-0 overflow-hidden">
                       <img 
                         src={getImageUrl(item)} 
@@ -285,7 +287,7 @@ export default function Checkout() {
                       {/* BTON DE SUPPRESSION AVEC TRANSMISSION RÉCURSIVE DE L'ID */}
                       <button
                         type="button"
-                        onClick={() => removeFromCart(itemId)}
+                        onClick={() => removeFromCart(itemId, itemIsPack)}
                         className="p-1 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         title="Supprimer cet article"
                       >

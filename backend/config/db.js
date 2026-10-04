@@ -195,7 +195,18 @@ async function initDb() {
         table.string('product_name').notNullable();
         table.decimal('unit_price', 10, 2).notNullable();
         table.integer('quantity').notNullable();
+        table.integer('pack_id').references('id').inTable('packs').onDelete('SET NULL');
+        table.string('item_type').notNullable().defaultTo('product');
       });
+    } else {
+      // Ajout rétroactif : support des packs dans les commandes
+      const hasPackId = await db.schema.hasColumn('order_items', 'pack_id');
+      if (!hasPackId) {
+        await db.schema.table('order_items', table => {
+          table.integer('pack_id').nullable();
+          table.string('item_type').notNullable().defaultTo('product');
+        });
+      }
     }
   }
 }

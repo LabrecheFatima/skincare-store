@@ -22,20 +22,27 @@ export function CartProvider({ children }) {
   const addToCart = (product, qty = 1) => {
     setCart(prev => {
       const currentCart = Array.isArray(prev) ? prev : [];
-      const existing = currentCart.find(i => i.id === product.id);
+      const isPack = Boolean(product.isPack);
+      // Un pack et un produit peuvent avoir le même id : on compare aussi le type
+      const isSame = (i) => i.id === product.id && Boolean(i.isPack) === isPack;
+      const existing = currentCart.find(isSame);
       if (existing) {
-        return currentCart.map(i => i.id === product.id ? { ...i, qty: i.qty + qty } : i);
+        return currentCart.map(i => isSame(i) ? { ...i, qty: i.qty + qty } : i);
       }
-      return [...currentCart, { ...product, qty }];
+      return [...currentCart, { ...product, isPack, qty }];
     });
   };
 
-  const removeFromCart = (id) => {
-  setCart(prev => {
-    const currentCart = Array.isArray(prev) ? prev : [];
-    return currentCart.filter(item => String(item.id) !== String(id) && String(item.product_id) !== String(id));
-  });
-};  
+  const removeFromCart = (id, isPack = false) => {
+    setCart(prev => {
+      const currentCart = Array.isArray(prev) ? prev : [];
+      return currentCart.filter(item => {
+        const sameType = Boolean(item.isPack) === Boolean(isPack);
+        const sameId = String(item.id) === String(id) || String(item.product_id) === String(id);
+        return !(sameType && sameId);
+      });
+    });
+  };
 
   const clearCart = () => setCart([]);
 

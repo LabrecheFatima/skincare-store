@@ -5,6 +5,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
+// URL de l'API : VITE_API_URL (ex: https://mondomaine.com/api) ou proxy local '/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 const AdminOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +40,7 @@ const AdminOrders = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/orders', {
+      const response = await fetch(`${API_BASE}/admin/orders`, {
         headers: getAuthHeaders()
       });
 
@@ -64,7 +67,7 @@ const AdminOrders = () => {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      const response = await fetch(`/api/admin/orders/${id}/status`, {
+      const response = await fetch(`${API_BASE}/admin/orders/${id}/status`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ status: newStatus }),
@@ -92,7 +95,7 @@ const AdminOrders = () => {
     if (!deleteModal.orderId) return;
 
     try {
-      const response = await fetch(`/api/admin/orders/${deleteModal.orderId}`, { 
+      const response = await fetch(`${API_BASE}/admin/orders/${deleteModal.orderId}`, { 
         method: 'DELETE',
         headers: getAuthHeaders()
       });
@@ -121,7 +124,7 @@ const AdminOrders = () => {
 
   const handleSaveEdit = async (id) => {
     try {
-      const response = await fetch(`/api/admin/orders/${id}/details`, {
+      const response = await fetch(`${API_BASE}/admin/orders/${id}/details`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(editFormData),
@@ -269,7 +272,7 @@ const AdminOrders = () => {
                   </th>
                   <th className="py-3.5 px-6">Client & Contact</th>
                   <th className="py-3.5 px-6">Adresse & Wilaya</th>
-                  <th className="py-3.5 px-6">Produits commandés</th>
+                  <th className="py-3.5 px-6">Articles commandés</th>
                   <th onClick={() => handleSort('total_amount')} className="py-3.5 px-6 cursor-pointer select-none group hover:bg-stone-100/60 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span>Montant</span>
@@ -379,17 +382,36 @@ const AdminOrders = () => {
                       {/* Produits commandés */}
                       <td className="py-4 px-6 align-top">
                         {order.items && order.items.length > 0 ? (
-                          <div className="space-y-1 max-w-xs">
-                            {order.items.map((item, idx) => (
-                              <div key={item.id || idx} className="text-xs flex items-center justify-between gap-2 border-b border-stone-100 pb-1 last:border-none">
-                                <span className="font-medium text-stone-800 truncate" title={item.product_name}>
-                                  {item.product_name}
-                                </span>
-                                <span className="text-stone-500 shrink-0 font-mono">
-                                  x{item.quantity} ({item.unit_price} DA)
-                                </span>
-                              </div>
-                            ))}
+                          <div className="space-y-1.5 max-w-xs">
+                            {order.items.map((item, idx) => {
+                              const isPack = item.item_type === 'pack';
+                              return (
+                                <div key={item.id || idx} className="text-xs border-b border-stone-100 pb-1.5 last:border-none">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-medium text-stone-800 flex items-center gap-1.5 min-w-0" title={item.product_name}>
+                                      {isPack && (
+                                        <span className="shrink-0 px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200 text-[9px] font-bold uppercase tracking-wider">
+                                          Pack
+                                        </span>
+                                      )}
+                                      <span className="truncate">{item.product_name}</span>
+                                    </span>
+                                    <span className="text-stone-500 shrink-0 font-mono">
+                                      x{item.quantity} ({item.unit_price} DA)
+                                    </span>
+                                  </div>
+
+                                  {/* Contenu du pack */}
+                                  {isPack && item.pack_products && item.pack_products.length > 0 && (
+                                    <ul className="mt-1 ml-1 pl-2 border-l border-stone-200 text-[11px] text-stone-400 space-y-0.5">
+                                      {item.pack_products.map((p, i) => (
+                                        <li key={i}>{p.quantity}× {p.name}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
                           <span className="text-xs text-stone-400 italic">Aucun détail</span>
