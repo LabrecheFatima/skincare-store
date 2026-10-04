@@ -6,6 +6,18 @@ import { Trash2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_URL } from '../config';
 
+const PHONE_ERROR = 'Numéro invalide : 10 chiffres requis (ex : 06 12 34 56 78).';
+
+// "06 12 34 56 78" / "+213 612345678" -> "0612345678" (null si invalide : 10 chiffres, 05/06/07)
+const normalizeDzPhone = (raw) => {
+  const text = String(raw || '').trim();
+  if (!/^[\d\s.\-+()]+$/.test(text)) return null;
+  let digits = text.replace(/\D/g, '');
+  if (digits.startsWith('00213')) digits = '0' + digits.slice(5);
+  else if (digits.startsWith('213')) digits = '0' + digits.slice(3);
+  return /^0[567]\d{8}$/.test(digits) ? digits : null;
+};
+
 export default function Checkout() {
   const { cart, clearCart, removeFromCart } = useCart();
   const navigate = useNavigate();
@@ -22,11 +34,13 @@ export default function Checkout() {
     wilaya: '',
     commune: '',
     address: '',
-    notes: ''
+    notes: '',
+    website: '' // champ piège anti-robots (doit rester vide)
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
 
   // 1. Charger la configuration et les wilayas actives depuis le backend
   useEffect(() => {
@@ -45,6 +59,7 @@ export default function Checkout() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'phone') setPhoneError('');
 
     if (name === 'wilaya' && shippingEnabled) {
       const match = shippingRates.find(r => r.wilaya_name === value);
@@ -91,6 +106,12 @@ export default function Checkout() {
       return;
     }
 
+    const normalizedPhone = normalizeDzPhone(formData.phone);
+    if (!normalizedPhone) {
+      setPhoneError(PHONE_ERROR);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -101,7 +122,8 @@ export default function Checkout() {
       const orderPayload = {
         customer_first_name: firstName,
         customer_last_name: lastName,
-        customer_phone: formData.phone,
+        customer_phone: normalizedPhone,
+        website: formData.website,
         wilaya: shippingEnabled ? formData.wilaya : 'N/A',
         commune: formData.commune || 'Centre',
         delivery_address: formData.address,
@@ -123,7 +145,7 @@ export default function Checkout() {
       if (clearCart) clearCart();
     } catch (error) {
       console.error("Erreur lors de la validation de la commande :", error);
-      alert("Une erreur est survenue lors de l'enregistrement de votre commande.");
+      alert(error.response?.data?.error || "Une erreur est survenue lors de l'enregistrement de votre commande.");
     } finally {
       setIsSubmitting(false);
     }
@@ -191,11 +213,15 @@ export default function Checkout() {
                     type="tel" 
                     name="phone" 
                     required 
+                    inputMode="tel"
+                    maxLength={17}
                     placeholder="06XX XX XX XX" 
                     value={formData.phone} 
                     onChange={handleInputChange} 
-                    className="w-full bg-[#FBF9F5] border border-stone-200 rounded-2xl px-4 py-3 text-xs focus:outline-none focus:border-stone-400 transition-colors" 
+                    onBlur={() => { if (formData.phone && !normalizeDzPhone(formData.phone)) setPhoneError(PHONE_ERROR); }}
+                    className={`w-full bg-[#FBF9F5] border rounded-2xl px-4 py-3 text-xs focus:outline-none transition-colors ${phoneError ? 'border-rose-300 focus:border-rose-400' : 'border-stone-200 focus:border-stone-400'}`} 
                   />
+                  {phoneError && <p className="mt-1.5 text-[11px] text-rose-500">{phoneError}</p>}
                 </div>
 
                 {/* MENU DÉROULANT DES WILAYAS */}
@@ -243,6 +269,14 @@ export default function Checkout() {
                   onChange={handleInputChange} 
                   className="w-full bg-[#FBF9F5] border border-stone-200 rounded-2xl px-4 py-3 text-xs focus:outline-none focus:border-stone-400 transition-colors" 
                 />
+              </div>
+
+              {/* Champ piège anti-spam : invisible pour les clients, rempli par les robots */}
+              <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}>
+                <label>
+                  Ne pas remplir
+                  <input type="text" name="website" tabIndex={-1} autoComplete="off" value={formData.website} onChange={handleInputChange} />
+                </label>
               </div>
 
               <button type="submit" disabled={isSubmitting} className="w-full bg-stone-900 text-white py-4 rounded-full text-xs font-medium uppercase tracking-widest hover:bg-stone-800 transition-all shadow-xs cursor-pointer disabled:opacity-50">

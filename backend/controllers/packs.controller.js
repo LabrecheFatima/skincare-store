@@ -68,6 +68,69 @@ exports.getAll = async (req, res) => {
   }
 };
 
+// [ADMIN] Liste paginée des packs (inclut les packs masqués) + filtre "à réapprovisionner"
+// Sans paramètre "page", renvoie la liste complète comme avant.
+exports.getAllAdmin = async (req, res) => {
+  if (req.query.page === undefined) return exports.getAll(req, res);
+
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const lowStockOnly = req.query.low_stock === '1' || req.query.low_stock === 'true';
+
+    let query = db('packs');
+    if (lowStockOnly) query = query.where('stock_quantity', '<', 0);
+
+    const totalRow = await query.clone().count({ count: '*' }).first();
+    const total = Number(totalRow.count);
+
+    // Nombre total de packs à réapprovisionner (pour le badge du filtre)
+    const lowRow = await db('packs').where('stock_quantity', '<', 0).count({ count: '*' }).first();
+
+    const packs = await query.clone().orderBy('id', 'desc').limit(limit).offset((page - 1) * limit).select('*');
+
+    let data = [];
+    if (packs.length > 0) {
+      const packIds = packs.map(p => p.id);
+
+      const items = await db('pack_items')
+        .join('products', 'pack_items.product_id', 'products.id')
+        .whereIn('pack_items.pack_id', packIds)
+        .select(
+          'pack_items.pack_id',
+          'products.id as id',
+          'products.id as product_id',
+          'products.name',
+          'products.original_price',
+          'products.image_url',
+          'pack_items.quantity'
+        );
+
+      const packImages = await db('pack_images')
+        .whereIn('pack_id', packIds)
+        .catch(() => []);
+
+      data = packs.map(pack => {
+        const images = packImages.filter(img => img.pack_id === pack.id).map(img => img.image_url);
+        return {
+          ...pack,
+          products: items.filter(item => item.pack_id === pack.id),
+          images,
+          image_url: images[0] || pack.image_url || null
+        };
+      });
+    }
+
+    res.json({
+      data,
+      pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) },
+      low_stock_count: Number(lowRow.count),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // Créer un nouveau pack
 exports.create = async (req, res) => {
   const { name, slug, description, original_price, promo_price, stock_quantity, is_active, products, items } = req.body;

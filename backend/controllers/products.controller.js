@@ -77,6 +77,55 @@ exports.getAll = async (req, res) => {
   }
 };
 
+// [ADMIN] Liste paginée (inclut les produits masqués) avec recherche et filtre "à réapprovisionner"
+exports.getAllAdmin = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const { search } = req.query;
+    const lowStockOnly = req.query.low_stock === '1' || req.query.low_stock === 'true';
+
+    let query = db('products');
+    if (search && String(search).trim()) {
+      const like = `%${String(search).trim()}%`;
+      query = query.where(function () {
+        this.where('name', 'like', like).orWhere('slug', 'like', like);
+      });
+    }
+    if (lowStockOnly) query = query.where('stock_quantity', '<', 0);
+
+    const totalRow = await query.clone().count({ count: '*' }).first();
+    const total = Number(totalRow.count);
+
+    // Nombre total de produits à réapprovisionner (pour le badge du filtre)
+    const lowRow = await db('products').where('stock_quantity', '<', 0).count({ count: '*' }).first();
+
+    const products = await query.clone().orderBy('id', 'desc').limit(limit).offset((page - 1) * limit).select('*');
+
+    const productIds = products.map(p => p.id);
+    const images = productIds.length > 0 ? await db('product_images').whereIn('product_id', productIds) : [];
+
+    const data = products.map(p => {
+      const pImages = images.filter(img => img.product_id === p.id).map(img => img.image_url);
+      return {
+        ...p,
+        images: pImages,
+        image_url: pImages[0] || p.image_url || null,
+        final_price: p.promo_price ?? p.original_price,
+        has_promo: p.promo_price !== null && p.promo_price !== undefined,
+      };
+    });
+
+    res.json({
+      data,
+      pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) },
+      low_stock_count: Number(lowRow.count),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.getBySlug = async (req, res) => {
   try {
     const product = await db('products').where({ slug: req.params.slug, is_active: 1 }).first();

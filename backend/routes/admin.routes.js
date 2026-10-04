@@ -19,13 +19,14 @@ router.put('/categories/:id', auth, categoriesController.update);
 router.delete('/categories/:id', auth, categoriesController.delete);
 
 // Produits
+router.get('/products', auth, productsController.getAllAdmin);
 router.post('/products', auth, upload.array('images', 10), productsController.create);
 router.put('/products/:id', auth, upload.array('images', 10), productsController.update);
 router.delete('/products/:id', auth, productsController.delete);
 router.post('/products/import', auth, productsController.bulkImport);
 
 // Packs (Admin)
-router.get('/packs', auth, packsController.getAll);
+router.get('/packs', auth, packsController.getAllAdmin);
 router.post('/packs', auth, upload.array('images', 10), packsController.create);
 router.put('/packs/:id', auth, upload.array('images', 10), packsController.update);
 router.delete('/packs/:id', auth, packsController.delete);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../../services/api';
 import { read, utils } from 'xlsx';
 import { 
@@ -21,12 +21,101 @@ import {
   Info
 } from 'lucide-react';
 
+// ---------- Pagination ----------
+const PAGE_SIZES = [10, 20, 50];
+
+const getPageList = (page, totalPages) => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const set = new Set([1, totalPages, page - 1, page, page + 1]);
+  if (page <= 3) [2, 3, 4].forEach(p => set.add(p));
+  if (page >= totalPages - 2) [totalPages - 1, totalPages - 2, totalPages - 3].forEach(p => set.add(p));
+  const sorted = [...set].filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  const result = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) result.push('…');
+    result.push(p);
+  });
+  return result;
+};
+
+function Pagination({ page, pageSize, total, onPageChange, onPageSizeChange }) {
+  if (!total) return null;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/50 text-xs text-stone-500">
+      <div className="flex items-center gap-3">
+        <span>{from}–{to} sur {total}</span>
+        <select
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(Number(e.target.value))}
+          className="px-2 py-1 border border-stone-200 rounded-lg bg-white text-xs focus:outline-none cursor-pointer"
+        >
+          {PAGE_SIZES.map(size => (
+            <option key={size} value={size}>{size} / page</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-1 flex-wrap justify-center">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          Précédent
+        </button>
+
+        {getPageList(page, totalPages).map((p, i) =>
+          p === '…' ? (
+            <span key={`dots-${i}`} className="px-2 text-stone-400">…</span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              className={`min-w-8 px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                p === page
+                  ? 'bg-stone-900 text-white border-stone-900'
+                  : 'bg-white border-stone-200 hover:bg-stone-100'
+              }`}
+            >
+              {p}
+            </button>
+          )
+        )}
+
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination + filtre "à réapprovisionner" (côté serveur)
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const latestRequest = useRef(0);
   const [isImporting, setIsImporting] = useState(false);
 
   // État pour la notification / Toast stylé
@@ -69,29 +158,60 @@ export default function AdminProducts() {
     }, 4500);
   };
 
-  // Charger les produits et les catégories
+  // Charger les catégories (une seule fois)
+  useEffect(() => {
+    api.get('/categories')
+      .then(res => setCategories(res.data || []))
+      .catch(() => setCategories([]));
+  }, []);
+
+  // Charger les produits (pagination + recherche + filtre "à réapprovisionner" côté serveur)
   const fetchData = async () => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError(null);
     try {
-      const [resProducts, resCategories] = await Promise.all([
-        api.get('/products?limit=1000'),
-        api.get('/categories').catch(() => ({ data: [] }))
-      ]);
+      const res = await api.get('/admin/products', {
+        params: {
+          page,
+          limit: pageSize,
+          search: debouncedSearch || undefined,
+          low_stock: lowStockOnly ? 1 : undefined
+        }
+      });
+      if (requestId !== latestRequest.current) return; // réponse périmée
 
-      setProducts(resProducts.data.data || resProducts.data || []);
-      setCategories(resCategories.data || []);
+      const payload = res.data || {};
+      const list = payload.data || [];
+      const totalCount = payload.pagination?.total ?? list.length;
+      const totalPages = payload.pagination?.totalPages ?? 1;
+
+      setProducts(list);
+      setTotal(totalCount);
+      setLowStockCount(payload.low_stock_count ?? 0);
+
+      // Si la page demandée n'existe plus (ex : dernier produit de la page supprimé), on recule
+      if (list.length === 0 && totalCount > 0 && page > totalPages) setPage(totalPages);
     } catch (err) {
       console.error('Erreur lors du chargement des données :', err);
-      setError('Impossible de charger la liste des produits.');
+      if (requestId === latestRequest.current) setError('Impossible de charger la liste des produits.');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   };
 
+  // Recherche : on attend 350 ms après la dernière frappe
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, pageSize, debouncedSearch, lowStockOnly]);
 
   // Génération automatique du slug
   const handleNameChange = (e) => {
@@ -229,7 +349,7 @@ export default function AdminProducts() {
     setIsDeleting(true);
     try {
       await api.delete(`/admin/products/${deletingProduct.id}`);
-      setProducts(prev => prev.filter(p => p.id !== deletingProduct.id));
+      fetchData();
       showToast(`Le produit "${deletingProduct.name}" a été supprimé.`, 'success');
       setDeletingProduct(null);
     } catch (err) {
@@ -239,10 +359,8 @@ export default function AdminProducts() {
     }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.slug?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Recherche, filtre "à réapprovisionner" et pagination sont gérés côté serveur
+  const filteredProducts = products;
 
   // Importation CSV / Excel avec gestion des erreurs et toast
   const handleFileUpload = async (e) => {
@@ -361,20 +479,40 @@ export default function AdminProducts() {
         </div>
       </div>
 
-      {/* Barre de recherche */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-        <input
-          type="text"
-          placeholder="Rechercher un produit par nom ou slug..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 transition-colors"
-        />
+      {/* Barre de recherche + filtre "à réapprovisionner" */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+          <input
+            type="text"
+            placeholder="Rechercher un produit par nom ou slug..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 transition-colors"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => { setLowStockOnly(prev => !prev); setPage(1); }}
+          className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+            lowStockOnly
+              ? 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'
+              : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
+          }`}
+        >
+          <AlertTriangle size={15} />
+          À réapprovisionner
+          {lowStockCount > 0 && (
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${lowStockOnly ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700'}`}>
+              {lowStockCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Tableau des Produits */}
-      {loading ? (
+      {loading && products.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-stone-200">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-stone-900 border-t-transparent"></div>
           <p className="text-sm text-stone-500 mt-3">Chargement des produits...</p>
@@ -387,11 +525,11 @@ export default function AdminProducts() {
       ) : filteredProducts.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-stone-200">
           <Package className="mx-auto text-stone-300 mb-3" size={40} />
-          <p className="text-stone-700 font-medium text-base">Aucun produit trouvé</p>
+          <p className="text-stone-700 font-medium text-base">{lowStockOnly ? 'Aucun produit à réapprovisionner' : 'Aucun produit trouvé'}</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto transition-opacity ${loading ? 'opacity-50' : ''}`}>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-stone-50/80 border-b border-stone-200 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
@@ -454,6 +592,11 @@ export default function AdminProducts() {
                         }`}>
                           {product.stock_quantity}
                         </span>
+                        {Number(product.stock_quantity) < 0 && (
+                          <span className="block mt-1 text-[10px] font-semibold uppercase tracking-wider text-rose-600">
+                            À réapprovisionner : {Math.abs(Number(product.stock_quantity))}
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-4 px-6">
@@ -492,6 +635,14 @@ export default function AdminProducts() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
         </div>
       )}
 
@@ -714,9 +865,12 @@ export default function AdminProducts() {
                     value={formData.stock_quantity}
                     onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
                     className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-900"
-                    min="0"
+                    step="1"
                     required
                   />
+                  <p className="mt-1 text-[11px] text-stone-400">
+                    Peut être négatif (ex : -3 = 3 unités à réapprovisionner).
+                  </p>
                 </div>
               </div>
 

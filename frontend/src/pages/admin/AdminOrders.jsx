@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Package, Search, Filter, RefreshCw, ChevronDown, ChevronUp, 
   Trash2, Edit, Check, X, Phone, MapPin, User, ArrowUpDown, Clock,
@@ -8,6 +8,86 @@ import {
 // URL de l'API : VITE_API_URL (ex: https://mondomaine.com/api) ou proxy local '/api'
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+// ---------- Pagination ----------
+const PAGE_SIZES = [10, 20, 50];
+
+const getPageList = (page, totalPages) => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const set = new Set([1, totalPages, page - 1, page, page + 1]);
+  if (page <= 3) [2, 3, 4].forEach(p => set.add(p));
+  if (page >= totalPages - 2) [totalPages - 1, totalPages - 2, totalPages - 3].forEach(p => set.add(p));
+  const sorted = [...set].filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  const result = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) result.push('…');
+    result.push(p);
+  });
+  return result;
+};
+
+function Pagination({ page, pageSize, total, onPageChange, onPageSizeChange }) {
+  if (!total) return null;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/50 text-xs text-stone-500">
+      <div className="flex items-center gap-3">
+        <span>{from}–{to} sur {total}</span>
+        <select
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(Number(e.target.value))}
+          className="px-2 py-1 border border-stone-200 rounded-lg bg-white text-xs focus:outline-none cursor-pointer"
+        >
+          {PAGE_SIZES.map(size => (
+            <option key={size} value={size}>{size} / page</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-1 flex-wrap justify-center">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          Précédent
+        </button>
+
+        {getPageList(page, totalPages).map((p, i) =>
+          p === '…' ? (
+            <span key={`dots-${i}`} className="px-2 text-stone-400">…</span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              className={`min-w-8 px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                p === page
+                  ? 'bg-stone-900 text-white border-stone-900'
+                  : 'bg-white border-stone-200 hover:bg-stone-100'
+              }`}
+            >
+              {p}
+            </button>
+          )
+        )}
+
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const AdminOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,6 +96,13 @@ const AdminOrders = () => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
+
+  // Pagination (côté serveur)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const latestRequest = useRef(0);
 
   // État pour la modal de confirmation de suppression
   const [deleteModal, setDeleteModal] = useState({
@@ -33,14 +120,34 @@ const AdminOrders = () => {
     };
   };
 
+  // Recherche : on attend 350 ms après la dernière frappe avant d'interroger le serveur
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Rechargement à chaque changement de page, de taille, de recherche, de statut ou de tri
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [page, pageSize, debouncedSearch, statusFilter, sortConfig]);
 
   const fetchOrders = async () => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/orders`, {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
+        sort: sortConfig.key,
+        dir: sortConfig.direction
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (statusFilter !== 'ALL') params.set('status', statusFilter);
+
+      const response = await fetch(`${API_BASE}/admin/orders?${params.toString()}`, {
         headers: getAuthHeaders()
       });
 
@@ -57,11 +164,21 @@ const AdminOrders = () => {
       }
 
       const data = await response.json();
-      setOrders(Array.isArray(data) ? data : []);
+      if (requestId !== latestRequest.current) return; // réponse périmée (une requête plus récente est en cours)
+
+      const list = Array.isArray(data) ? data : (data.data || []);
+      const totalCount = Array.isArray(data) ? data.length : (data.pagination?.total ?? list.length);
+      const totalPages = Array.isArray(data) ? 1 : (data.pagination?.totalPages ?? 1);
+
+      setOrders(list);
+      setTotal(totalCount);
+
+      // Si la page demandée n'existe plus (ex : dernière commande de la page supprimée), on recule
+      if (list.length === 0 && totalCount > 0 && page > totalPages) setPage(totalPages);
     } catch (err) {
       console.error("Erreur chargement commandes :", err);
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   };
 
@@ -74,6 +191,8 @@ const AdminOrders = () => {
       });
       if (response.ok) {
         setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
+        // Si un filtre de statut est actif, la commande doit disparaître de la liste filtrée
+        if (statusFilter !== 'ALL') fetchOrders();
       }
     } catch (err) {
       console.error("Erreur mise à jour statut:", err);
@@ -100,7 +219,7 @@ const AdminOrders = () => {
         headers: getAuthHeaders()
       });
       if (response.ok) {
-        setOrders(orders.filter(o => o.id !== deleteModal.orderId));
+        fetchOrders();
       }
     } catch (err) {
       console.error("Erreur suppression:", err);
@@ -144,30 +263,11 @@ const AdminOrders = () => {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setPage(1);
   };
 
-  const filteredOrders = orders
-    .filter(order => {
-      const fullName = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.toLowerCase();
-      const phone = order.customer_phone || '';
-      const wilaya = order.wilaya || '';
-      const idStr = order.id ? order.id.toString() : '';
-
-      const matchesSearch = 
-        fullName.includes(searchTerm.toLowerCase()) ||
-        phone.includes(searchTerm) ||
-        idStr.includes(searchTerm) ||
-        wilaya.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
+  // Recherche, filtre de statut, tri et pagination sont gérés côté serveur
+  const filteredOrders = orders;
 
   const getStatusBadge = (status) => {
     const styles = {
@@ -235,7 +335,7 @@ const AdminOrders = () => {
           <Filter className="w-4 h-4 text-stone-500 shrink-0" />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="w-full md:w-auto px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 bg-white cursor-pointer"
           >
             <option value="ALL">Tous les statuts</option>
@@ -250,7 +350,7 @@ const AdminOrders = () => {
 
       {/* Tableau des Commandes */}
       <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        {loading ? (
+        {loading && orders.length === 0 ? (
           <div className="p-12 text-center text-stone-500 flex flex-col items-center gap-3">
             <RefreshCw className="w-6 h-6 animate-spin text-stone-400" />
             <span>Chargement des commandes...</span>
@@ -260,7 +360,7 @@ const AdminOrders = () => {
             Aucune commande trouvée.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto transition-opacity ${loading ? 'opacity-50' : ''}`}>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-stone-50/80 border-b border-stone-200 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
@@ -484,6 +584,14 @@ const AdminOrders = () => {
             </table>
           </div>
         )}
+
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
       </div>
 
       {/* MODAL DE CONFIRMATION DE SUPPRESSION (Style de l'image 2) */}

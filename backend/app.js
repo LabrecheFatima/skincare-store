@@ -8,6 +8,9 @@ const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
 
+// Derrière le proxy cPanel : permet de lire la vraie IP du visiteur (req.ip) pour l'anti-spam
+app.set('trust proxy', 1);
+
 // 1. Liste des origines autorisées (Render, cPanel, Vercel, Local)
 const allowedOrigins = [
   'http://localhost:5173',

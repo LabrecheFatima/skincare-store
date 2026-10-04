@@ -1,9 +1,98 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../../services/api';
 import { Package, Plus, Trash2, Edit3, Upload, X, Check, AlertCircle, AlertTriangle } from 'lucide-react';
 
+// ---------- Pagination ----------
+const PAGE_SIZES = [10, 20, 50];
+
+const getPageList = (page, totalPages) => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const set = new Set([1, totalPages, page - 1, page, page + 1]);
+  if (page <= 3) [2, 3, 4].forEach(p => set.add(p));
+  if (page >= totalPages - 2) [totalPages - 1, totalPages - 2, totalPages - 3].forEach(p => set.add(p));
+  const sorted = [...set].filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  const result = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) result.push('…');
+    result.push(p);
+  });
+  return result;
+};
+
+function Pagination({ page, pageSize, total, onPageChange, onPageSizeChange }) {
+  if (!total) return null;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/50 text-xs text-stone-500">
+      <div className="flex items-center gap-3">
+        <span>{from}–{to} sur {total}</span>
+        <select
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(Number(e.target.value))}
+          className="px-2 py-1 border border-stone-200 rounded-lg bg-white text-xs focus:outline-none cursor-pointer"
+        >
+          {PAGE_SIZES.map(size => (
+            <option key={size} value={size}>{size} / page</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-1 flex-wrap justify-center">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          Précédent
+        </button>
+
+        {getPageList(page, totalPages).map((p, i) =>
+          p === '…' ? (
+            <span key={`dots-${i}`} className="px-2 text-stone-400">…</span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              className={`min-w-8 px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                p === page
+                  ? 'bg-stone-900 text-white border-stone-900'
+                  : 'bg-white border-stone-200 hover:bg-stone-100'
+              }`}
+            >
+              {p}
+            </button>
+          )
+        )}
+
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPacks() {
   const [packs, setPacks] = useState([]);
+
+  // Pagination + filtre "à réapprovisionner" (côté serveur)
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const latestRequest = useRef(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPack, setEditingPack] = useState(null);
 
@@ -31,14 +120,32 @@ export default function AdminPacks() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, pageSize, lowStockOnly]);
 
   const fetchData = async () => {
+    const requestId = ++latestRequest.current;
+    setLoading(true);
     try {
-      const resPacks = await api.get('/admin/packs');
-      setPacks(resPacks.data || []);
+      const resPacks = await api.get('/admin/packs', {
+        params: { page, limit: pageSize, low_stock: lowStockOnly ? 1 : undefined }
+      });
+      if (requestId !== latestRequest.current) return; // réponse périmée
+
+      const payload = resPacks.data || {};
+      const list = Array.isArray(payload) ? payload : (payload.data || []);
+      const totalCount = Array.isArray(payload) ? payload.length : (payload.pagination?.total ?? list.length);
+      const totalPages = Array.isArray(payload) ? 1 : (payload.pagination?.totalPages ?? 1);
+
+      setPacks(list);
+      setTotal(totalCount);
+      setLowStockCount(payload.low_stock_count ?? 0);
+
+      // Si la page demandée n'existe plus (ex : dernier pack de la page supprimé), on recule
+      if (list.length === 0 && totalCount > 0 && page > totalPages) setPage(totalPages);
     } catch (err) {
       console.error('Erreur lors du chargement des packs :', err);
+    } finally {
+      if (requestId === latestRequest.current) setLoading(false);
     }
   };
 
@@ -164,9 +271,30 @@ export default function AdminPacks() {
         </button>
       </div>
 
+      {/* Filtre "à réapprovisionner" */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => { setLowStockOnly(prev => !prev); setPage(1); }}
+          className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+            lowStockOnly
+              ? 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'
+              : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
+          }`}
+        >
+          <AlertTriangle size={15} />
+          À réapprovisionner
+          {lowStockCount > 0 && (
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${lowStockOnly ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700'}`}>
+              {lowStockCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Liste des Packs */}
       <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        <div className={`overflow-x-auto transition-opacity ${loading ? 'opacity-50' : ''}`}>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-stone-50/80 border-b border-stone-200 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
@@ -181,7 +309,7 @@ export default function AdminPacks() {
               {packs.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="text-center py-8 text-stone-400">
-                    Aucun pack trouvé
+                    {lowStockOnly ? 'Aucun pack à réapprovisionner' : 'Aucun pack trouvé'}
                   </td>
                 </tr>
               ) : (
@@ -215,7 +343,7 @@ export default function AdminPacks() {
                       <td className={`py-4 px-6 font-medium ${Number(pack.stock_quantity) < 0 ? 'text-rose-600' : 'text-stone-600'}`}>
                         {pack.stock_quantity}
                         {Number(pack.stock_quantity) < 0 && (
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider">À réapprovisionner</span>
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider">À réapprovisionner : {Math.abs(Number(pack.stock_quantity))}</span>
                         )}
                       </td>
                       <td className="py-4 px-6 text-right">
@@ -241,6 +369,14 @@ export default function AdminPacks() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
       </div>
 
       {/* Modal Formulaire Pack */}

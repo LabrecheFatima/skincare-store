@@ -3,8 +3,11 @@ const db = require('../config/db');
 exports.create = async (req, res) => {
   const { customer_first_name, customer_last_name, customer_phone, wilaya, commune, delivery_address, items, notes } = req.body;
 
-  if (!items || items.length === 0) {
+  if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Le panier est vide' });
+  }
+  if (items.length > 30) {
+    return res.status(400).json({ error: 'Panier trop volumineux' });
   }
 
   try {
@@ -14,7 +17,7 @@ exports.create = async (req, res) => {
     // 1. Calculer le sous-total des produits
     for (const item of items) {
       const itemId = item.id || item.product_id;
-      const qty = item.qty || item.quantity || 1;
+      const qty = Math.min(Math.max(parseInt(item.qty || item.quantity, 10) || 1, 1), 99);
       const isPack = Boolean(item.isPack || item.is_pack || item.item_type === 'pack');
 
       // --- Cas d'un PACK : on lit la table "packs" (et non "products") ---
@@ -94,32 +97,79 @@ exports.create = async (req, res) => {
 
 exports.getAll = async (req, res) => {
   try {
-    const orders = await db('orders').select('*').orderBy('id', 'desc');
-    if (orders.length === 0) return res.json([]);
+    // Sans paramètre "page" : liste complète (compatibilité, ex : tableau de bord)
+    const paginated = req.query.page !== undefined;
 
-    // Articles (produits ET packs) de toutes les commandes
-    const orderItems = await db('order_items').whereIn('order_id', orders.map(o => o.id));
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const sortKey = ['id', 'total_amount'].includes(req.query.sort) ? req.query.sort : 'id';
+    const sortDir = req.query.dir === 'asc' ? 'asc' : 'desc';
 
-    // Contenu des packs commandés (pour l'affichage dans le tableau admin)
-    const packIds = [...new Set(orderItems.filter(i => i.item_type === 'pack' && i.pack_id).map(i => i.pack_id))];
-    let packContents = [];
-    if (packIds.length > 0) {
-      packContents = await db('pack_items')
-        .join('products', 'pack_items.product_id', 'products.id')
-        .whereIn('pack_items.pack_id', packIds)
-        .select('pack_items.pack_id', 'products.name', 'pack_items.quantity');
+    let orders;
+    let total = 0;
+
+    if (paginated) {
+      let query = db('orders');
+
+      const { status, search } = req.query;
+      if (status && status !== 'ALL') query = query.where('status', status);
+
+      // Recherche : chaque mot doit correspondre au nom, prénom, téléphone, wilaya ou n° de commande
+      if (search && String(search).trim()) {
+        const terms = String(search).trim().split(/\s+/).slice(0, 5);
+        for (const term of terms) {
+          const like = `%${term}%`;
+          query = query.where(function () {
+            this.where('customer_first_name', 'like', like)
+              .orWhere('customer_last_name', 'like', like)
+              .orWhere('customer_phone', 'like', like)
+              .orWhere('wilaya', 'like', like);
+            if (/^\d+$/.test(term)) this.orWhere('id', Number(term));
+          });
+        }
+      }
+
+      const totalRow = await query.clone().count({ count: '*' }).first();
+      total = Number(totalRow.count);
+
+      let listQuery = query.clone().orderBy(sortKey, sortDir);
+      if (sortKey !== 'id') listQuery = listQuery.orderBy('id', 'desc');
+      orders = await listQuery.limit(limit).offset((page - 1) * limit).select('*');
+    } else {
+      orders = await db('orders').select('*').orderBy('id', 'desc');
     }
 
-    const result = orders.map(order => ({
-      ...order,
-      items: orderItems
-        .filter(i => i.order_id === order.id)
-        .map(i => i.item_type === 'pack'
-          ? { ...i, pack_products: packContents.filter(p => p.pack_id === i.pack_id) }
-          : i),
-    }));
+    let result = [];
+    if (orders.length > 0) {
+      // Articles (produits ET packs) des commandes de la page
+      const orderItems = await db('order_items').whereIn('order_id', orders.map(o => o.id));
 
-    res.json(result);
+      // Contenu des packs commandés (pour l'affichage dans le tableau admin)
+      const packIds = [...new Set(orderItems.filter(i => i.item_type === 'pack' && i.pack_id).map(i => i.pack_id))];
+      let packContents = [];
+      if (packIds.length > 0) {
+        packContents = await db('pack_items')
+          .join('products', 'pack_items.product_id', 'products.id')
+          .whereIn('pack_items.pack_id', packIds)
+          .select('pack_items.pack_id', 'products.name', 'pack_items.quantity');
+      }
+
+      result = orders.map(order => ({
+        ...order,
+        items: orderItems
+          .filter(i => i.order_id === order.id)
+          .map(i => i.item_type === 'pack'
+            ? { ...i, pack_products: packContents.filter(p => p.pack_id === i.pack_id) }
+            : i),
+      }));
+    }
+
+    if (!paginated) return res.json(result);
+
+    res.json({
+      data: result,
+      pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) },
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -134,46 +184,30 @@ exports.updateStatus = async (req, res) => {
       const currentOrder = await trx('orders').where({ id }).first();
       if (!currentOrder) throw new Error('Commande non trouvée');
 
-      // ---- PACKS ----
-      // Le stock d'un pack est "consommé" dès que la commande est confirmée, expédiée ou livrée.
-      // - on le retire quand on PASSE à un statut consommant (ex: en_attente -> confirmee)
-      // - on le RESTITUE quand on QUITTE ces statuts (ex: confirmee -> annulee)
-      // Le stock d'un pack peut devenir négatif (ex: -3 = 3 packs à réapprovisionner).
-      const PACK_STOCK_STATUSES = ['confirmee', 'expediee', 'livree'];
-      const packWasConsumed = PACK_STOCK_STATUSES.includes(currentOrder.status);
-      const packWillBeConsumed = PACK_STOCK_STATUSES.includes(status);
-      const consumePacks = !packWasConsumed && packWillBeConsumed;
-      const restorePacks = packWasConsumed && !packWillBeConsumed;
+      // ---- GESTION DU STOCK (produits ET packs : même règle) ----
+      // Le stock est "consommé" tant que la commande est confirmée, expédiée ou livrée.
+      // - on le retire quand on PASSE à un de ces statuts (ex: en_attente -> confirmee)
+      // - on le RESTITUE quand on les QUITTE (ex: confirmee -> annulee)
+      // Le stock peut devenir négatif (ex: -3 = 3 unités à réapprovisionner) : aucun blocage.
+      const STOCK_STATUSES = ['confirmee', 'expediee', 'livree'];
+      const wasConsumed = STOCK_STATUSES.includes(currentOrder.status);
+      const willBeConsumed = STOCK_STATUSES.includes(status);
+      const consume = !wasConsumed && willBeConsumed;
+      const restore = wasConsumed && !willBeConsumed;
 
-      // ---- PRODUITS (logique inchangée) ----
-      const consumeProducts = status === 'confirmee' && currentOrder.status !== 'confirmee';
-
-      if (consumePacks || restorePacks || consumeProducts) {
+      if (consume || restore) {
         const items = await trx('order_items').where({ order_id: id });
 
         for (const item of items) {
-          // --- Pack ---
-          if (item.item_type === 'pack') {
-            if (!item.pack_id) continue; // pack supprimé entre-temps
+          const isPack = item.item_type === 'pack';
+          const table = isPack ? 'packs' : 'products';
+          const refId = isPack ? item.pack_id : item.product_id;
+          if (!refId) continue; // produit/pack supprimé entre-temps
 
-            if (consumePacks) {
-              await trx('packs').where({ id: item.pack_id }).decrement('stock_quantity', item.quantity);
-            } else if (restorePacks) {
-              await trx('packs').where({ id: item.pack_id }).increment('stock_quantity', item.quantity);
-            }
-            continue;
-          }
-
-          // --- Produit ---
-          if (consumeProducts && item.product_id) {
-            const product = await trx('products').where({ id: item.product_id }).first();
-            if (!product) throw new Error(`Produit #${item.product_id} introuvable`);
-
-            if (product.stock_quantity < item.quantity) {
-              throw new Error(`Stock insuffisant pour "${product.name}" (Stock: ${product.stock_quantity}, Demandé: ${item.quantity})`);
-            }
-
-            await trx('products').where({ id: item.product_id }).decrement('stock_quantity', item.quantity);
+          if (consume) {
+            await trx(table).where({ id: refId }).decrement('stock_quantity', item.quantity);
+          } else {
+            await trx(table).where({ id: refId }).increment('stock_quantity', item.quantity);
           }
         }
       }
